@@ -1,4 +1,3 @@
-import argparse
 import sqlite3
 import datetime
 import os
@@ -564,106 +563,122 @@ def list_reminders():
         print(f"[{reminder['reminder_date']}] For {reminder['first_name']} {last_name}: {reminder['message']}")
 
 
-# --- Main Application Logic & CLI Parsing ---
+# --- Main Application Logic & Interactive Menu ---
+
+def interactive_menu():
+    """Displays the interactive menu and handles user input."""
+    create_tables()  # Ensure tables are created at the start
+
+    input_func = input
+
+    bunny = r"""
+       _     _
+       \`\ /`/
+        \ V /
+        /. .\\
+       =\ T /=
+        / ^ \\
+     {}/\\ //\\
+     __\ " " /__
+jgs (____/^\____)
+"""
+
+    try:
+        terminal_width = os.get_terminal_size().columns
+    except OSError:
+        terminal_width = 80  # Default width
+
+    bunny_lines = bunny.strip().split('\n')
+    bunny_width = len(max(bunny_lines, key=len))
+    padding = " " * (terminal_width - bunny_width - 2)
+
+
+    while True:
+        print("\n--- pCRM Main Menu ---")
+
+        menu_items = [
+            "(A)dd Contact",
+            "(L)ist Contacts",
+            "(V)iew Contact",
+            "(E)dit Contact",
+            "(D)elete Contact",
+            "Add (N)ote to Contact",
+            "Add (R)eminder for Contact",
+            "(T)ag Contact",
+            "(U)ntag Contact",
+            "Lo(g) Interaction",
+            "(S)uggest Contacts",
+            "List Re(m)inders",
+            "View Das(h)board",
+            "E(x)it"
+        ]
+
+        for i, item in enumerate(menu_items):
+            if i < len(bunny_lines):
+                padding = " " * (terminal_width - len(item) - len(bunny_lines[i]))
+                print(f"{item}{padding}{bunny_lines[i]}")
+            else:
+                print(item)
+
+
+        choice = input_func(f"Enter your choice: ").strip().lower()
+
+        if choice == 'a':
+            name = input_func("Enter contact's full name: ")
+            name_parts = name.split()
+            first_name = name_parts[0]
+            last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else None
+            add_contact(first_name, last_name)
+        elif choice == 'l':
+            tag = input_func("Enter tag to filter by (or press Enter for all): ").strip()
+            list_contacts(tag if tag else None)
+        elif choice == 'v':
+            name = input_func("Enter contact's full name to view: ")
+            view_contact(name)
+        elif choice == 'e':
+            name = input_func("Enter contact's full name to edit: ")
+            edit_contact(name)
+        elif choice == 'd':
+            name = input_func("Enter contact's full name to delete: ")
+            delete_contact(name)
+        elif choice == 'n':
+            name = input_func("Enter contact's full name for the note: ")
+            message = input_func("Enter the note: ")
+            add_note(name, message)
+        elif choice == 'r':
+            name = input_func("Enter contact's full name for the reminder: ")
+            message = input_func("Enter the reminder message: ")
+            date_str = input_func("Enter the reminder date (YYYY-MM-DD): ")
+            add_reminder(name, message, date_str)
+        elif choice == 't':
+            name = input_func("Enter contact's full name to tag: ")
+            tag = input_func("Enter the tag: ")
+            add_tag_to_contact(name, tag)
+        elif choice == 'u':
+            name = input_func("Enter contact's full name to untag: ")
+            tag = input_func("Enter the tag: ")
+            remove_tag_from_contact(name, tag)
+        elif choice == 'g':
+            name = input_func("Enter contact's full name to log interaction: ")
+            message = input_func("Enter the interaction details: ")
+            log_interaction(name, message)
+        elif choice == 's':
+            suggest_contacts()
+        elif choice == 'm':
+            list_reminders()
+        elif choice == 'h':
+            show_status_dashboard()
+        elif choice == 'x':
+            print("Exiting pCRM. Goodbye!")
+            break
+        else:
+            print("Invalid choice. Please try again.")
+
 
 def main():
-    """Main function to run the CLI application."""
-    # Ensure the database and tables exist
-    create_tables()
-
-    parser = argparse.ArgumentParser(description="A simple command-line CRM to manage personal relationships.")
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
-
-    # 'add' command
-    parser_add = subparsers.add_parser("add", help="Add a new contact.")
-    parser_add.add_argument("name", type=str, help="Contact's full name (e.g., 'John Doe').")
-
-    # 'list' command
-    parser_list = subparsers.add_parser("list", help="List all contacts.")
-    parser_list.add_argument("-t", "--tag", type=str, help="Filter contacts by a specific tag.")
-
-    # 'view' command
-    parser_view = subparsers.add_parser("view", help="View details for a specific contact.")
-    parser_view.add_argument("name", type=str, help="Contact's full name.")
-
-    # 'delete' command
-    parser_delete = subparsers.add_parser("delete", help="Delete a contact.")
-    parser_delete.add_argument("name", type=str, help="Contact's full name.")
-
-    # 'edit' command
-    parser_edit = subparsers.add_parser("edit", help="Edit a contact's name.")
-    parser_edit.add_argument("name", type=str, help="The full name of the contact to edit.")
-
-    # 'tag' command
-    parser_tag = subparsers.add_parser("tag", help="Add a tag to a contact.")
-    parser_tag.add_argument("name", type=str, help="Contact's full name.")
-    parser_tag.add_argument("tag_name", type=str, help="The tag to add.")
-
-    # 'untag' command
-    parser_untag = subparsers.add_parser("untag", help="Remove a tag from a contact.")
-    parser_untag.add_argument("name", type=str, help="Contact's full name.")
-    parser_untag.add_argument("tag_name", type=str, help="The tag to remove.")
-
-    # 'note' command
-    parser_note = subparsers.add_parser("note", help="Add a note for a contact.")
-    parser_note.add_argument("name", type=str, help="Contact's full name.")
-    parser_note.add_argument("-m", "--message", required=True, type=str, help="The content of the note.")
-
-    # 'log' command
-    parser_log = subparsers.add_parser("log", help="Log an interaction with a contact.")
-    parser_log.add_argument("name", type=str, help="Contact's full name.")
-    parser_log.add_argument("-m", "--message", required=True, type=str, help="A short description of the interaction.")
-
-    # 'reminder' command
-    parser_reminder = subparsers.add_parser("reminder", help="Set a reminder for a contact.")
-    parser_reminder.add_argument("name", type=str, help="Contact's full name.")
-    parser_reminder.add_argument("-d", "--date", required=True, type=str, help="Reminder date in YYYY-MM-DD format.")
-    parser_reminder.add_argument("-m", "--message", required=True, type=str, help="The reminder message.")
-
-    # 'reminders' command to list upcoming reminders
-    subparsers.add_parser("reminders", help="List all upcoming reminders.")
-
-    # 'suggest' command
-    parser_suggest = subparsers.add_parser("suggest", help="Suggest contacts to reconnect with.")
-    parser_suggest.add_argument("--days", type=int, default=30, help="The number of days since last contact.")
-
-    # 'status' command
-    subparsers.add_parser("status", help="Show a dashboard of reminders and suggestions.")
-
-
-    args = parser.parse_args()
-
-    if args.command == "add":
-        name_parts = args.name.split()
-        first_name = name_parts[0]
-        last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else None
-        add_contact(first_name, last_name)
-    elif args.command == "list":
-        list_contacts(args.tag)
-    elif args.command == "view":
-        view_contact(args.name)
-    elif args.command == "delete":
-        delete_contact(args.name)
-    elif args.command == "edit":
-        edit_contact(args.name)
-    elif args.command == "tag":
-        add_tag_to_contact(args.name, args.tag_name)
-    elif args.command == "untag":
-        remove_tag_from_contact(args.name, args.tag_name)
-    elif args.command == "note":
-        add_note(args.name, args.message)
-    elif args.command == "log":
-        log_interaction(args.name, args.message)
-    elif args.command == "reminder":
-        add_reminder(args.name, args.message, args.date)
-    elif args.command == "reminders":
-        list_reminders()
-    elif args.command == "suggest":
-        suggest_contacts(args.days)
-    elif args.command == "status":
-        show_status_dashboard()
-    else:
-        parser.print_help()
+    """Main function to run the application."""
+    # The application now runs through the interactive menu.
+    interactive_menu()
 
 if __name__ == "__main__":
     main()
