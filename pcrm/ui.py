@@ -19,6 +19,12 @@ from .tags import (
     remove_tag_from_contact,
 )
 
+
+def clear_screen():
+    """Clears the terminal screen."""
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+
 def suggest_contacts(days=30):
     """Suggests contacts who have not been contacted recently."""
     conn = connect_to_db()
@@ -92,108 +98,92 @@ def show_status_dashboard():
 def interactive_menu():
     """Displays the interactive menu and handles user input."""
     create_tables()  # Ensure tables are created at the start
-
     input_func = input
 
-    bunny = r"""
-       _     _
-       \`\ /`/
-        \ V /
-        /. .\\
-       =\ T /=
-        / ^ \\
-     {}/\\ //\\
-     __\ " " /__
-jgs (____/^\____)
-"""
-
-    try:
-        terminal_width = os.get_terminal_size().columns
-    except OSError:
-        terminal_width = 80  # Default width
-
-    bunny_lines = bunny.strip().split('\n')
-    bunny_width = len(max(bunny_lines, key=len))
-    padding = " " * (terminal_width - bunny_width - 2)
-
-
     while True:
-        print("\n--- pCRM Main Menu ---")
+        clear_screen()
+        print("--- pCRM Main Menu ---")
 
         menu_items = [
-            "(A)dd Contact",
-            "(L)ist Contacts",
-            "(V)iew Contact",
-            "(E)dit Contact",
-            "(D)elete Contact",
-            "Add (N)ote to Contact",
-            "Add (R)eminder for Contact",
-            "(T)ag Contact",
-            "(U)ntag Contact",
-            "Lo(g) Interaction",
-            "(S)uggest Contacts",
-            "List Re(m)inders",
-            "View Das(h)board",
-            "E(x)it"
+            "Add Contact",
+            "List Contacts",
+            "View Contact",
+            "Edit Contact",
+            "Delete Contact",
+            "Add Note to Contact",
+            "Add Reminder for Contact",
+            "Tag Contact",
+            "Untag Contact",
+            "Log Interaction",
+            "Suggest Contacts",
+            "List Reminders",
+            "View Dashboard",
+            "Exit"
         ]
 
-        for i, item in enumerate(menu_items):
-            if i < len(bunny_lines):
-                padding = " " * (terminal_width - len(item) - len(bunny_lines[i]))
-                print(f"{item}{padding}{bunny_lines[i]}")
-            else:
-                print(item)
+        for i, item in enumerate(menu_items, 1):
+            print(f"{i}. {item}")
 
+        choice = input_func("Enter your choice (1-14): ").strip()
 
-        choice = input_func(f"Enter your choice: ").strip().lower()
-
-        if choice == 'a':
+        if choice == '1':
             name = input_func("Enter contact's full name: ")
             name_parts = name.split()
             first_name = name_parts[0]
             last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else None
             add_contact(first_name, last_name)
-        elif choice == 'l':
+            print(f"Contact '{name}' added successfully.")
+        elif choice == '2':
             tag = input_func("Enter tag to filter by (or press Enter for all): ").strip()
             list_contacts(tag if tag else None)
-        elif choice == 'v':
+        elif choice == '3':
             name = input_func("Enter contact's full name to view: ")
             view_contact(name)
-        elif choice == 'e':
+        elif choice == '4':
             name = input_func("Enter contact's full name to edit: ")
             edit_contact(name)
-        elif choice == 'd':
+            print(f"Contact '{name}' edited successfully.")
+        elif choice == '5':
             name = input_func("Enter contact's full name to delete: ")
             delete_contact(name)
-        elif choice == 'n':
+            print(f"Contact '{name}' deleted successfully.")
+        elif choice == '6':
             name = input_func("Enter contact's full name for the note: ")
             message = input_func("Enter the note: ")
             add_note(name, message)
-        elif choice == 'r':
+            print(f"Note added for '{name}'.")
+        elif choice == '7':
             name = input_func("Enter contact's full name for the reminder: ")
             message = input_func("Enter the reminder message: ")
             date_str = input_func("Enter the reminder date (YYYY-MM-DD): ")
             add_reminder(name, message, date_str)
-        elif choice == 't':
+            print(f"Reminder added for '{name}'.")
+        elif choice == '8':
             name = input_func("Enter contact's full name to tag: ")
             tag = input_func("Enter the tag: ")
             add_tag_to_contact(name, tag)
-        elif choice == 'u':
+            print(f"Tag '{tag}' added to '{name}'.")
+        elif choice == '9':
             name = input_func("Enter contact's full name to untag: ")
             tag = input_func("Enter the tag: ")
             remove_tag_from_contact(name, tag)
-        elif choice == 'g':
+            print(f"Tag '{tag}' removed from '{name}'.")
+        elif choice == '10':
             name = input_func("Enter contact's full name to log interaction: ")
             message = input_func("Enter the interaction details: ")
             log_interaction(name, message)
-        elif choice == 's':
+            print(f"Interaction logged for '{name}'.")
+        elif choice == '11':
             suggest_contacts()
-        elif choice == 'm':
+        elif choice == '12':
             list_reminders()
-        elif choice == 'h':
+        elif choice == '13':
             show_status_dashboard()
-        elif choice == 'x':
+        elif choice == '14':
             print("Exiting pCRM. Goodbye!")
             break
         else:
             print("Invalid choice. Please try again.")
+
+        if choice != '14':
+            input_func("\nPress Enter to continue...")
