@@ -3,13 +3,28 @@ import sqlite3
 import datetime
 import os
 
+# --- Datetime handling for SQLite ---
+# The default adapter is deprecated in Python 3.12
+def adapt_datetime_iso(dt):
+    """Adapter to store datetimes as ISO 8601 strings."""
+    return dt.isoformat()
+
+def convert_timestamp(ts):
+    """Converter to parse ISO 8601 strings back to datetime objects."""
+    # The timestamp is stored as a string, which sqlite3 returns as bytes.
+    return datetime.datetime.fromisoformat(ts.decode('utf-8'))
+
+sqlite3.register_adapter(datetime.datetime, adapt_datetime_iso)
+sqlite3.register_converter("timestamp", convert_timestamp)
+
+
 # --- Database Setup and Management ---
 
 DB_FILE = "personal_crm.db"
 
 def connect_to_db():
     """Establishes a connection to the SQLite database."""
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(DB_FILE, detect_types=sqlite3.PARSE_DECLTYPES)
     conn.row_factory = sqlite3.Row  # Allows accessing columns by name
     return conn
 
@@ -223,14 +238,13 @@ def view_contact(full_name):
     conn.close()
 
     if contact['last_contacted_at']:
-        ts_str = contact['last_contacted_at'].split('.')[0]
-        last_contacted_str = datetime.datetime.strptime(ts_str, '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d')
+        last_contacted_str = contact['last_contacted_at'].strftime('%Y-%m-%d')
     else:
         last_contacted_str = 'Never'
 
     print(f"\n--- Details for {contact['first_name']} {contact['last_name'] or ''} ---")
     print(f"Last Contacted: {last_contacted_str}")
-    print(f"Added on: {datetime.datetime.strptime(contact['created_at'].split('.')[0], '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d')}")
+    print(f"Added on: {contact['created_at'].strftime('%Y-%m-%d')}")
 
     if tags:
         print(f"Tags: {', '.join(tags)}")
@@ -238,7 +252,7 @@ def view_contact(full_name):
     if notes:
         print("\nNotes:")
         for note in notes:
-            note_date = datetime.datetime.strptime(note['created_at'], '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d')
+            note_date = note['created_at'].strftime('%Y-%m-%d')
             print(f"  [{note_date}] {note['note_text']}")
     else:
         print("\nNo notes for this contact yet.")
@@ -519,8 +533,7 @@ def suggest_contacts(days=30):
     print(f"--- Suggestions (not contacted in over {days} days) ---")
     for contact in contacts:
         last_name = contact['last_name'] or ''
-        ts_str = contact['last_contacted_at'].split('.')[0]
-        last_contacted_str = datetime.datetime.strptime(ts_str, '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d')
+        last_contacted_str = contact['last_contacted_at'].strftime('%Y-%m-%d')
         print(f"- {contact['first_name']} {last_name} (last contacted {last_contacted_str})")
 
 
