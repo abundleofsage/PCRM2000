@@ -1,6 +1,8 @@
 import datetime
+from rich.console import Console
 from .database import connect_to_db
 from .contacts import choose_contact, _update_last_contacted
+from .google_calendar import create_calendar_event
 
 def add_note(full_name, message):
     """Adds a note for a specific contact."""
@@ -35,16 +37,17 @@ def log_interaction(full_name, message):
 
 
 def add_reminder(full_name, message, date_str):
-    """Adds a reminder for a specific contact."""
+    """Adds a reminder for a specific contact and optionally to Google Calendar."""
+    console = Console()
     contact_id = choose_contact(full_name)
     if not contact_id:
         return
 
     try:
-        # Validate date format
-        datetime.datetime.strptime(date_str, '%Y-%m-%d')
+        # Validate date format and get datetime object
+        reminder_date = datetime.datetime.strptime(date_str, '%Y-%m-%d')
     except ValueError:
-        print("Error: Date must be in YYYY-MM-DD format.")
+        console.print("Error: Date must be in YYYY-MM-DD format.", style="bold red")
         return
 
     conn = connect_to_db()
@@ -53,10 +56,20 @@ def add_reminder(full_name, message, date_str):
     conn.commit()
     conn.close()
     _update_last_contacted(contact_id)
-    print(f"Reminder set for {full_name} on {date_str}.")
+    console.print(f"Reminder set for {full_name} on {date_str}.", style="green")
+
+    # Ask user if they want to add to Google Calendar
+    add_to_gcal = input("Add this reminder to Google Calendar? (y/n): ").lower()
+    if add_to_gcal == 'y':
+        summary = f"Reminder for {full_name}: {message}"
+        # Create a 1-hour event at 9am on the reminder date
+        start_time = reminder_date.replace(hour=9, minute=0, second=0)
+        end_time = start_time + datetime.timedelta(hours=1)
+        create_calendar_event(summary, start_time, end_time)
 
 def list_reminders():
     """Lists all upcoming reminders."""
+    console = Console()
     conn = connect_to_db()
     cursor = conn.cursor()
     today = datetime.date.today().strftime('%Y-%m-%d')
@@ -73,10 +86,10 @@ def list_reminders():
     conn.close()
 
     if not reminders:
-        print("No upcoming reminders.")
+        console.print("No upcoming reminders.", style="green")
         return
 
-    print("--- Upcoming Reminders ---")
+    console.print("--- Upcoming Reminders ---", style="bold yellow")
     for reminder in reminders:
         last_name = reminder['last_name'] or ''
-        print(f"[{reminder['reminder_date']}] For {reminder['first_name']} {last_name}: {reminder['message']}")
+        console.print(f"[{reminder['reminder_date']}] For {reminder['first_name']} {last_name}: {reminder['message']}", style="yellow")

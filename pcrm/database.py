@@ -120,5 +120,30 @@ def create_tables():
     );
     """)
 
+    # Create special occasions table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS special_occasions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        contact_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        date DATE NOT NULL,
+        FOREIGN KEY (contact_id) REFERENCES contacts (id) ON DELETE CASCADE
+    );
+    """)
+
+    # Create gifts table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS gifts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        contact_id INTEGER NOT NULL,
+        occasion_id INTEGER,
+        description TEXT NOT NULL,
+        direction TEXT NOT NULL, -- "given" or "received"
+        date DATE,
+        FOREIGN KEY (contact_id) REFERENCES contacts (id) ON DELETE CASCADE,
+        FOREIGN KEY (occasion_id) REFERENCES special_occasions (id) ON DELETE SET NULL
+    );
+    """)
+
     conn.commit()
     conn.close()

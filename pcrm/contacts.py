@@ -1,5 +1,8 @@
 import sqlite3
 import datetime
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
 from .database import connect_to_db
 
 # This function is internal to the contacts module but will be used by other modules.
@@ -110,8 +113,64 @@ def find_contacts_by_name(full_name):
     conn.close()
     return results
 
+def advanced_search_contacts(criteria):
+    """
+    Searches for contacts based on a dictionary of criteria.
+    Criteria keys should be valid column names in the contacts table.
+    Values will be searched for using a LIKE query.
+    """
+    console = Console()
+    conn = connect_to_db()
+    cursor = conn.cursor()
+
+    base_query = "SELECT id, first_name, last_name, email, birthday, date_met, how_met, favorite_color FROM contacts"
+    where_clauses = []
+    params = []
+
+    for key, value in criteria.items():
+        # Basic validation to ensure key is a valid column name
+        if key in ["first_name", "last_name", "email", "birthday", "date_met", "how_met", "favorite_color"]:
+            where_clauses.append(f"{key} LIKE ?")
+            params.append(f"%{value}%")
+
+    if not where_clauses:
+        console.print("No valid search criteria provided.", style="bold red")
+        return
+
+    query = f"{base_query} WHERE {' AND '.join(where_clauses)} ORDER BY first_name, last_name"
+
+    try:
+        cursor.execute(query, params)
+        contacts = cursor.fetchall()
+    except sqlite3.Error as e:
+        console.print(f"Database error: {e}", style="bold red")
+        conn.close()
+        return
+
+    conn.close()
+
+    if not contacts:
+        console.print("No contacts found matching your criteria.", style="yellow")
+        return
+
+    table = Table(title="Advanced Search Results", show_header=True, header_style="bold blue")
+    table.add_column("ID", style="dim")
+    table.add_column("First Name")
+    table.add_column("Last Name")
+    table.add_column("Email")
+    for contact in contacts:
+        table.add_row(
+            str(contact['id']),
+            contact['first_name'],
+            contact['last_name'] or '',
+            contact['email'] or ''
+        )
+    console.print(table)
+
+
 def list_contacts(tag_name=None):
     """Lists all contacts, optionally filtering by a tag."""
+    console = Console()
     conn = connect_to_db()
     cursor = conn.cursor()
 
@@ -134,15 +193,15 @@ def list_contacts(tag_name=None):
 
     if not contacts:
         if tag_name:
-            print(f"No contacts found with the tag '{tag_name}'.")
+            console.print(f"No contacts found with the tag '{tag_name}'.", style="yellow")
         else:
-            print("No contacts found. Add one with the 'add' command.")
+            console.print("No contacts found. Add one with the 'add' command.", style="yellow")
         return
 
-    print(header)
+    console.print(header, style="bold blue")
     for contact in contacts:
         last_name = contact['last_name'] or ''
-        print(f"- {contact['first_name']} {last_name}")
+        console.print(f"- {contact['first_name']} {last_name}", style="blue")
 
 
 def choose_contact(full_name):
@@ -181,7 +240,8 @@ def choose_contact(full_name):
             print("Invalid input. Please enter a number.")
 
 def view_contact(full_name):
-    """Displays detailed information for a specific contact."""
+    """Displays detailed information for a specific contact using rich."""
+    console = Console()
     contact_id = choose_contact(full_name)
     if not contact_id:
         return
@@ -189,86 +249,80 @@ def view_contact(full_name):
     conn = connect_to_db()
     cursor = conn.cursor()
 
-    # Get contact details
+    # Get all data in one go
     cursor.execute("SELECT * FROM contacts WHERE id = ?", (contact_id,))
     contact = cursor.fetchone()
-
-    # Get phones
     cursor.execute("SELECT phone_number, phone_type FROM phones WHERE contact_id = ?", (contact_id,))
     phones = cursor.fetchall()
-
-    # Get pets
     cursor.execute("SELECT name FROM pets WHERE contact_id = ?", (contact_id,))
     pets = cursor.fetchall()
-
-    # Get partners
     cursor.execute("SELECT name FROM partners WHERE contact_id = ?", (contact_id,))
     partners = cursor.fetchall()
-
-    # Get notes for the contact
     cursor.execute("SELECT note_text, created_at FROM notes WHERE contact_id = ? ORDER BY created_at DESC", (contact_id,))
     notes = cursor.fetchall()
-
-    # Get reminders for the contact
     cursor.execute("SELECT message, reminder_date FROM reminders WHERE contact_id = ? ORDER BY reminder_date ASC", (contact_id,))
     reminders = cursor.fetchall()
-
-    # Get tags for the contact
-    cursor.execute("""
-        SELECT t.name FROM tags t
-        JOIN contact_tags ct ON t.id = ct.tag_id
-        WHERE ct.contact_id = ?
-    """, (contact_id,))
+    cursor.execute("SELECT t.name FROM tags t JOIN contact_tags ct ON t.id = ct.tag_id WHERE ct.contact_id = ?", (contact_id,))
     tags = [row['name'] for row in cursor.fetchall()]
-
     conn.close()
 
-    if contact['last_contacted_at']:
-        last_contacted_str = contact['last_contacted_at'].strftime('%Y-%m-%d')
-    else:
-        last_contacted_str = 'Never'
+    # Main Details Panel
+    last_contacted_str = contact['last_contacted_at'].strftime('%Y-%m-%d') if contact['last_contacted_at'] else '[red]Never[/red]'
 
-    print(f"\n--- Details for {contact['first_name']} {contact['last_name'] or ''} ---")
-    print(f"Email: {contact['email'] or 'N/A'}")
-    print(f"Birthday: {contact['birthday'] or 'N/A'}")
-    print(f"Date Met: {contact['date_met'] or 'N/A'}")
-    print(f"How Met: {contact['how_met'] or 'N/A'}")
-    print(f"Favorite Color: {contact['favorite_color'] or 'N/A'}")
-    print(f"Last Contacted: {last_contacted_str}")
-    print(f"Added on: {contact['created_at'].strftime('%Y-%m-%d')}")
-
-    if phones:
-        print("\nPhone Numbers:")
-        for phone in phones:
-            print(f"  - {phone['phone_number']} ({phone['phone_type']})")
-
-    if pets:
-        print("\nPets:")
-        for pet in pets:
-            print(f"  - {pet['name']}")
-
-    if partners:
-        print("\nPartners:")
-        for partner in partners:
-            print(f"  - {partner['name']}")
+    details = (
+        f"[b]Email:[/b] {contact['email'] or 'N/A'}\n"
+        f"[b]Birthday:[/b] {contact['birthday'] or 'N/A'}\n"
+        f"[b]Date Met:[/b] {contact['date_met'] or 'N/A'}\n"
+        f"[b]How Met:[/b] {contact['how_met'] or 'N/A'}\n"
+        f"[b]Favorite Color:[/b] {contact['favorite_color'] or 'N/A'}\n"
+        f"[b]Last Contacted:[/b] {last_contacted_str}\n"
+        f"[b]Added on:[/b] {contact['created_at'].strftime('%Y-%m-%d')}"
+    )
 
     if tags:
-        print(f"Tags: {', '.join(tags)}")
+        details += f"\n[b]Tags:[/b] [cyan]{', '.join(tags)}[/cyan]"
+
+    panel_title = f"[bold white]{contact['first_name']} {contact['last_name'] or ''}[/bold white]"
+    console.print(Panel(details, title=panel_title, border_style="blue", expand=False))
+
+    # Associated Info in Tables
+    if phones:
+        table = Table(title="Phone Numbers", show_header=True, header_style="bold magenta")
+        table.add_column("Number")
+        table.add_column("Type")
+        for phone in phones:
+            table.add_row(phone['phone_number'], phone['phone_type'])
+        console.print(table)
+
+    if pets:
+        table = Table(title="Pets", show_header=True, header_style="bold green")
+        table.add_column("Name")
+        for pet in pets:
+            table.add_row(pet['name'])
+        console.print(table)
+
+    if partners:
+        table = Table(title="Partners", show_header=True, header_style="bold green")
+        table.add_column("Name")
+        for partner in partners:
+            table.add_row(partner['name'])
+        console.print(table)
 
     if notes:
-        print("\nNotes:")
+        table = Table(title="Notes", show_header=True, header_style="bold yellow")
+        table.add_column("Date", style="dim")
+        table.add_column("Note")
         for note in notes:
-            note_date = note['created_at'].strftime('%Y-%m-%d')
-            print(f"  [{note_date}] {note['note_text']}")
-    else:
-        print("\nNo notes for this contact yet.")
+            table.add_row(note['created_at'].strftime('%Y-%m-%d'), note['note_text'])
+        console.print(table)
 
     if reminders:
-        print("\nReminders:")
+        table = Table(title="Reminders", show_header=True, header_style="bold red")
+        table.add_column("Date", style="dim")
+        table.add_column("Message")
         for reminder in reminders:
-            print(f"  [{reminder['reminder_date']}] {reminder['message']}")
-    else:
-        print("\nNo reminders for this contact yet.")
+            table.add_row(reminder['reminder_date'], reminder['message'])
+        console.print(table)
 
 
 def delete_contact(full_name):
