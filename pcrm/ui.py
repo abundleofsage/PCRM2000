@@ -18,6 +18,8 @@ from .tags import (
     add_tag_to_contact,
     remove_tag_from_contact,
 )
+from .data_exporter import export_data_to_csv
+from .data_importer import import_contacts_from_csv
 
 
 def clear_screen():
@@ -118,13 +120,15 @@ def interactive_menu():
             "Suggest Contacts",
             "List Reminders",
             "View Dashboard",
+            "Export Data to CSV",
+            "Import Contacts from CSV",
             "Exit"
         ]
 
         for i, item in enumerate(menu_items, 1):
             print(f"{i}. {item}")
 
-        choice = input_func("Enter your choice (1-14): ").strip()
+        choice = input_func("Enter your choice (1-16): ").strip()
 
         if choice == '1':
             name = input_func("Enter contact's full name: ")
@@ -172,10 +176,14 @@ def interactive_menu():
         elif choice == '13':
             show_status_dashboard()
         elif choice == '14':
+            export_data_to_csv()
+        elif choice == '15':
+            import_contacts_from_csv()
+        elif choice == '16':
             print("Exiting pCRM. Goodbye!")
             break
         else:
             print("Invalid choice. Please try again.")
 
-        if choice != '14':
+        if choice != '16':
             input_func("\nPress Enter to continue...")
