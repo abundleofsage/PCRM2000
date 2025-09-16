@@ -132,7 +132,6 @@ def interactive_menu():
             first_name = name_parts[0]
             last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else None
             add_contact(first_name, last_name)
-            print(f"Contact '{name}' added successfully.")
         elif choice == '2':
             tag = input_func("Enter tag to filter by (or press Enter for all): ").strip()
             list_contacts(tag if tag else None)
@@ -142,37 +141,30 @@ def interactive_menu():
         elif choice == '4':
             name = input_func("Enter contact's full name to edit: ")
             edit_contact(name)
-            print(f"Contact '{name}' edited successfully.")
         elif choice == '5':
             name = input_func("Enter contact's full name to delete: ")
             delete_contact(name)
-            print(f"Contact '{name}' deleted successfully.")
         elif choice == '6':
             name = input_func("Enter contact's full name for the note: ")
             message = input_func("Enter the note: ")
             add_note(name, message)
-            print(f"Note added for '{name}'.")
         elif choice == '7':
             name = input_func("Enter contact's full name for the reminder: ")
             message = input_func("Enter the reminder message: ")
             date_str = input_func("Enter the reminder date (YYYY-MM-DD): ")
             add_reminder(name, message, date_str)
-            print(f"Reminder added for '{name}'.")
         elif choice == '8':
             name = input_func("Enter contact's full name to tag: ")
             tag = input_func("Enter the tag: ")
             add_tag_to_contact(name, tag)
-            print(f"Tag '{tag}' added to '{name}'.")
         elif choice == '9':
             name = input_func("Enter contact's full name to untag: ")
             tag = input_func("Enter the tag: ")
             remove_tag_from_contact(name, tag)
-            print(f"Tag '{tag}' removed from '{name}'.")
         elif choice == '10':
             name = input_func("Enter contact's full name to log interaction: ")
             message = input_func("Enter the interaction details: ")
             log_interaction(name, message)
-            print(f"Interaction logged for '{name}'.")
         elif choice == '11':
             suggest_contacts()
         elif choice == '12':
