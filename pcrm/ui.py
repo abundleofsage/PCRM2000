@@ -7,6 +7,9 @@ from .contacts import (
     view_contact,
     edit_contact,
     delete_contact,
+    add_phone_to_contact,
+    add_pet_to_contact,
+    add_partner_to_contact,
 )
 from .interactions import (
     add_note,
@@ -131,11 +134,42 @@ def interactive_menu():
         choice = input_func("Enter your choice (1-16): ").strip()
 
         if choice == '1':
-            name = input_func("Enter contact's full name: ")
-            name_parts = name.split()
-            first_name = name_parts[0]
-            last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else None
-            add_contact(first_name, last_name)
+            first_name = input_func("Enter first name: ").strip()
+            if not first_name:
+                print("First name cannot be empty.")
+                continue
+            last_name = input_func("Enter last name: ").strip() or None
+            email = input_func("Enter email: ").strip() or None
+            birthday = input_func("Enter birthday (YYYY-MM-DD): ").strip() or None
+            date_met = input_func("Enter date met (YYYY-MM-DD): ").strip() or None
+            how_met = input_func("How did you meet? ").strip() or None
+            favorite_color = input_func("Enter favorite color: ").strip() or None
+
+            contact_id = add_contact(first_name, last_name, email, birthday, date_met, how_met, favorite_color)
+
+            if contact_id:
+                while True:
+                    phone = input_func("Add a phone number? (y/n): ").lower()
+                    if phone == 'y':
+                        number = input_func("Enter phone number: ").strip()
+                        ptype = input_func("Enter phone type (e.g., mobile): ").strip()
+                        add_phone_to_contact(contact_id, number, ptype)
+                    else:
+                        break
+                while True:
+                    pet = input_func("Add a pet? (y/n): ").lower()
+                    if pet == 'y':
+                        name = input_func("Enter pet's name: ").strip()
+                        add_pet_to_contact(contact_id, name)
+                    else:
+                        break
+                while True:
+                    partner = input_func("Add a partner? (y/n): ").lower()
+                    if partner == 'y':
+                        name = input_func("Enter partner's name: ").strip()
+                        add_partner_to_contact(contact_id, name)
+                    else:
+                        break
         elif choice == '2':
             tag = input_func("Enter tag to filter by (or press Enter for all): ").strip()
             list_contacts(tag if tag else None)

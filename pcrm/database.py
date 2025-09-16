@@ -37,8 +37,44 @@ def create_tables():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         first_name TEXT NOT NULL,
         last_name TEXT,
+        email TEXT,
+        birthday DATE,
+        date_met TIMESTAMP,
+        how_met TEXT,
+        favorite_color TEXT,
         last_contacted_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+
+    # Create phones table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS phones (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        contact_id INTEGER NOT NULL,
+        phone_number TEXT NOT NULL,
+        phone_type TEXT,
+        FOREIGN KEY (contact_id) REFERENCES contacts (id) ON DELETE CASCADE
+    );
+    """)
+
+    # Create pets table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS pets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        contact_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        FOREIGN KEY (contact_id) REFERENCES contacts (id) ON DELETE CASCADE
+    );
+    """)
+
+    # Create partners table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS partners (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        contact_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        FOREIGN KEY (contact_id) REFERENCES contacts (id) ON DELETE CASCADE
     );
     """)
 

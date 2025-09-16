@@ -12,18 +12,71 @@ def _update_last_contacted(contact_id):
     conn.commit()
     conn.close()
 
-def add_contact(first_name, last_name):
+def add_contact(first_name, last_name, email=None, birthday=None, date_met=None, how_met=None, favorite_color=None):
     """Adds a new contact to the database."""
     conn = connect_to_db()
     cursor = conn.cursor()
     now = datetime.datetime.now()
     try:
         cursor.execute(
-            "INSERT INTO contacts (first_name, last_name, created_at) VALUES (?, ?, ?)",
-            (first_name, last_name, now)
+            """INSERT INTO contacts
+               (first_name, last_name, email, birthday, date_met, how_met, favorite_color, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (first_name, last_name, email, birthday, date_met, how_met, favorite_color, now)
         )
+        contact_id = cursor.lastrowid
         conn.commit()
         print(f"Successfully added {first_name} {last_name}.")
+        return contact_id
+    except sqlite3.IntegrityError as e:
+        print(f"Error: {e}")
+        return None
+    finally:
+        conn.close()
+
+def add_phone_to_contact(contact_id, phone_number, phone_type):
+    """Adds a phone number to a contact."""
+    conn = connect_to_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO phones (contact_id, phone_number, phone_type) VALUES (?, ?, ?)",
+            (contact_id, phone_number, phone_type)
+        )
+        conn.commit()
+        print(f"Successfully added phone number to contact.")
+    except sqlite3.IntegrityError as e:
+        print(f"Error: {e}")
+    finally:
+        conn.close()
+
+def add_pet_to_contact(contact_id, name):
+    """Adds a pet to a contact."""
+    conn = connect_to_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO pets (contact_id, name) VALUES (?, ?)",
+            (contact_id, name)
+        )
+        conn.commit()
+        print(f"Successfully added pet to contact.")
+    except sqlite3.IntegrityError as e:
+        print(f"Error: {e}")
+    finally:
+        conn.close()
+
+def add_partner_to_contact(contact_id, name):
+    """Adds a partner to a contact."""
+    conn = connect_to_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO partners (contact_id, name) VALUES (?, ?)",
+            (contact_id, name)
+        )
+        conn.commit()
+        print(f"Successfully added partner to contact.")
     except sqlite3.IntegrityError as e:
         print(f"Error: {e}")
     finally:
@@ -140,6 +193,18 @@ def view_contact(full_name):
     cursor.execute("SELECT * FROM contacts WHERE id = ?", (contact_id,))
     contact = cursor.fetchone()
 
+    # Get phones
+    cursor.execute("SELECT phone_number, phone_type FROM phones WHERE contact_id = ?", (contact_id,))
+    phones = cursor.fetchall()
+
+    # Get pets
+    cursor.execute("SELECT name FROM pets WHERE contact_id = ?", (contact_id,))
+    pets = cursor.fetchall()
+
+    # Get partners
+    cursor.execute("SELECT name FROM partners WHERE contact_id = ?", (contact_id,))
+    partners = cursor.fetchall()
+
     # Get notes for the contact
     cursor.execute("SELECT note_text, created_at FROM notes WHERE contact_id = ? ORDER BY created_at DESC", (contact_id,))
     notes = cursor.fetchall()
@@ -164,8 +229,28 @@ def view_contact(full_name):
         last_contacted_str = 'Never'
 
     print(f"\n--- Details for {contact['first_name']} {contact['last_name'] or ''} ---")
+    print(f"Email: {contact['email'] or 'N/A'}")
+    print(f"Birthday: {contact['birthday'] or 'N/A'}")
+    print(f"Date Met: {contact['date_met'] or 'N/A'}")
+    print(f"How Met: {contact['how_met'] or 'N/A'}")
+    print(f"Favorite Color: {contact['favorite_color'] or 'N/A'}")
     print(f"Last Contacted: {last_contacted_str}")
     print(f"Added on: {contact['created_at'].strftime('%Y-%m-%d')}")
+
+    if phones:
+        print("\nPhone Numbers:")
+        for phone in phones:
+            print(f"  - {phone['phone_number']} ({phone['phone_type']})")
+
+    if pets:
+        print("\nPets:")
+        for pet in pets:
+            print(f"  - {pet['name']}")
+
+    if partners:
+        print("\nPartners:")
+        for partner in partners:
+            print(f"  - {partner['name']}")
 
     if tags:
         print(f"Tags: {', '.join(tags)}")
@@ -217,43 +302,104 @@ def delete_contact(full_name):
 
 
 def edit_contact(full_name):
-    """Finds a contact and allows the user to edit their name."""
+    """Finds a contact and allows the user to edit their details."""
     contact_id = choose_contact(full_name)
     if not contact_id:
         return
 
-    # Get the current name for context
-    conn = connect_to_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT first_name, last_name FROM contacts WHERE id = ?", (contact_id,))
-    contact = cursor.fetchone()
-    conn.close()
-    if not contact:
-        print(f"Error: Could not retrieve contact with ID {contact_id}.")
-        return
+    while True:
+        # Fetch fresh contact details each time in the loop
+        conn = connect_to_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM contacts WHERE id = ?", (contact_id,))
+        contact = cursor.fetchone()
+        conn.close()
+        if not contact:
+            print(f"Error: Could not retrieve contact with ID {contact_id}.")
+            return
 
-    current_full_name = f"{contact['first_name']} {contact['last_name'] or ''}".strip()
-    print(f"Editing contact: {current_full_name}")
+        current_full_name = f"{contact['first_name']} {contact['last_name'] or ''}".strip()
+        print(f"\n--- Editing Contact: {current_full_name} ---")
+        print("1. Edit Name")
+        print("2. Edit Email")
+        print("3. Edit Birthday")
+        print("4. Edit Date Met")
+        print("5. Edit How Met")
+        print("6. Edit Favorite Color")
+        print("7. Add Phone Number")
+        print("8. Add Pet")
+        print("9. Add Partner")
+        print("10. Back to Main Menu")
 
-    new_first_name = input(f"Enter new first name (current: {contact['first_name']}): ").strip()
-    new_last_name = input(f"Enter new last name (current: {contact['last_name'] or ''}): ").strip()
+        choice = input("What would you like to edit? ")
 
-    if not new_first_name:
-        print("First name cannot be empty. Edit cancelled.")
-        return
-
-    # If last name is empty, it should be stored as NULL
-    if not new_last_name:
-        new_last_name = None
-
-    conn = connect_to_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "UPDATE contacts SET first_name = ?, last_name = ? WHERE id = ?",
-        (new_first_name, new_last_name, contact_id)
-    )
-    conn.commit()
-    conn.close()
-
-    new_full_name = f"{new_first_name} {new_last_name or ''}".strip()
-    print(f"Successfully updated contact to '{new_full_name}'.")
+        if choice == '1':
+            new_first_name = input(f"Enter new first name (current: {contact['first_name']}): ").strip()
+            new_last_name = input(f"Enter new last name (current: {contact['last_name'] or ''}): ").strip()
+            if new_first_name:
+                conn = connect_to_db()
+                cursor = conn.cursor()
+                cursor.execute("UPDATE contacts SET first_name = ?, last_name = ? WHERE id = ?",
+                               (new_first_name, new_last_name or None, contact_id))
+                conn.commit()
+                conn.close()
+                print("Name updated.")
+            else:
+                print("First name cannot be empty.")
+        elif choice == '2':
+            new_email = input(f"Enter new email (current: {contact['email'] or 'N/A'}): ").strip()
+            conn = connect_to_db()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE contacts SET email = ? WHERE id = ?", (new_email, contact_id))
+            conn.commit()
+            conn.close()
+            print("Email updated.")
+        elif choice == '3':
+            new_birthday = input(f"Enter new birthday (YYYY-MM-DD) (current: {contact['birthday'] or 'N/A'}): ").strip()
+            conn = connect_to_db()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE contacts SET birthday = ? WHERE id = ?", (new_birthday, contact_id))
+            conn.commit()
+            conn.close()
+            print("Birthday updated.")
+        elif choice == '4':
+            new_date_met = input(f"Enter new date met (YYYY-MM-DD) (current: {contact['date_met'] or 'N/A'}): ").strip()
+            conn = connect_to_db()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE contacts SET date_met = ? WHERE id = ?", (new_date_met, contact_id))
+            conn.commit()
+            conn.close()
+            print("Date met updated.")
+        elif choice == '5':
+            new_how_met = input(f"Enter new how met (current: {contact['how_met'] or 'N/A'}): ").strip()
+            conn = connect_to_db()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE contacts SET how_met = ? WHERE id = ?", (new_how_met, contact_id))
+            conn.commit()
+            conn.close()
+            print("How met updated.")
+        elif choice == '6':
+            new_favorite_color = input(f"Enter new favorite color (current: {contact['favorite_color'] or 'N/A'}): ").strip()
+            conn = connect_to_db()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE contacts SET favorite_color = ? WHERE id = ?", (new_favorite_color, contact_id))
+            conn.commit()
+            conn.close()
+            print("Favorite color updated.")
+        elif choice == '7':
+            phone_number = input("Enter phone number: ").strip()
+            phone_type = input("Enter phone type (e.g., mobile, home, work): ").strip()
+            if phone_number:
+                add_phone_to_contact(contact_id, phone_number, phone_type)
+        elif choice == '8':
+            pet_name = input("Enter pet's name: ").strip()
+            if pet_name:
+                add_pet_to_contact(contact_id, pet_name)
+        elif choice == '9':
+            partner_name = input("Enter partner's name: ").strip()
+            if partner_name:
+                add_partner_to_contact(contact_id, partner_name)
+        elif choice == '10':
+            break
+        else:
+            print("Invalid choice. Please try again.")
