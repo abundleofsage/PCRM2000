@@ -1,0 +1,7 @@
+# SQLite database
+personal_crm.db
+
+# Python virtual environment
+venv/
+__pycache__/
+*.pyc

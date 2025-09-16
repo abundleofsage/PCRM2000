@@ -93,21 +93,33 @@ def add_contact(first_name, last_name):
     finally:
         conn.close()
 
-def find_contact_by_name(full_name):
-    """Finds a contact by their full name and returns their ID."""
+def find_contacts_by_name(full_name):
+    """
+    Finds contacts by name, case-insensitively.
+    Returns a list of matching contacts (as sqlite3.Row objects).
+    """
     conn = connect_to_db()
     cursor = conn.cursor()
-    name_parts = full_name.split()
-    if len(name_parts) == 1:
-        cursor.execute("SELECT id FROM contacts WHERE first_name = ?", (name_parts[0],))
-    else:
-        cursor.execute("SELECT id FROM contacts WHERE first_name = ? AND last_name = ?", (name_parts[0], ' '.join(name_parts[1:])))
+    name_parts = full_name.strip().split()
 
-    result = cursor.fetchone()
+    if len(name_parts) == 1:
+        # If one name is given, search both first and last names for an exact match
+        term = name_parts[0].lower()
+        cursor.execute(
+            "SELECT id, first_name, last_name FROM contacts WHERE LOWER(first_name) = ? OR LOWER(last_name) = ?",
+            (term, term)
+        )
+    else:
+        first_name = name_parts[0].lower()
+        last_name = ' '.join(name_parts[1:]).lower()
+        cursor.execute(
+            "SELECT id, first_name, last_name FROM contacts WHERE LOWER(first_name) = ? AND LOWER(last_name) = ?",
+            (first_name, last_name)
+        )
+
+    results = cursor.fetchall()
     conn.close()
-    if result:
-        return result['id']
-    return None
+    return results
 
 def list_contacts(tag_name=None):
     """Lists all contacts, optionally filtering by a tag."""
@@ -143,11 +155,46 @@ def list_contacts(tag_name=None):
         last_name = contact['last_name'] or ''
         print(f"- {contact['first_name']} {last_name}")
 
+
+def choose_contact(full_name):
+    """
+    Finds contacts by name and handles ambiguity by prompting the user.
+    Returns a single contact ID or None if no contact is chosen.
+    """
+    contacts = find_contacts_by_name(full_name)
+
+    if not contacts:
+        print(f"Contact '{full_name}' not found.")
+        return None
+
+    if len(contacts) == 1:
+        return contacts[0]['id']
+
+    # Multiple contacts found, prompt user to choose
+    print(f"\nMultiple contacts found for '{full_name}'. Please choose one:")
+    for i, contact in enumerate(contacts):
+        last_name = contact['last_name'] or ''
+        print(f"  {i + 1}: {contact['first_name']} {last_name} (ID: {contact['id']})")
+
+    while True:
+        try:
+            choice = input("Enter the number of the contact (or 'q' to cancel): ")
+            if choice.lower() == 'q':
+                print("Operation cancelled.")
+                return None
+
+            choice_index = int(choice) - 1
+            if 0 <= choice_index < len(contacts):
+                return contacts[choice_index]['id']
+            else:
+                print("Invalid number. Please try again.")
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+
 def view_contact(full_name):
     """Displays detailed information for a specific contact."""
-    contact_id = find_contact_by_name(full_name)
+    contact_id = choose_contact(full_name)
     if not contact_id:
-        print(f"Contact '{full_name}' not found.")
         return
 
     conn = connect_to_db()
@@ -183,7 +230,7 @@ def view_contact(full_name):
 
     print(f"\n--- Details for {contact['first_name']} {contact['last_name'] or ''} ---")
     print(f"Last Contacted: {last_contacted_str}")
-    print(f"Added on: {datetime.datetime.strptime(contact['created_at'], '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d')}")
+    print(f"Added on: {datetime.datetime.strptime(contact['created_at'].split('.')[0], '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d')}")
 
     if tags:
         print(f"Tags: {', '.join(tags)}")
@@ -203,23 +250,79 @@ def view_contact(full_name):
     else:
         print("\nNo reminders for this contact yet.")
 
+
 def delete_contact(full_name):
     """Deletes a contact and all their associated data."""
-    contact_id = find_contact_by_name(full_name)
+    contact_id = choose_contact(full_name)
     if not contact_id:
-        print(f"Contact '{full_name}' not found.")
         return
 
-    confirm = input(f"Are you sure you want to delete {full_name}? This cannot be undone. (y/n): ")
+    # To get the name for the confirmation prompt, we need to fetch it.
+    conn = connect_to_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT first_name, last_name FROM contacts WHERE id = ?", (contact_id,))
+    contact = cursor.fetchone()
+    conn.close()
+    if not contact:
+        print(f"Could not find contact with ID {contact_id} to delete.") # Should not happen
+        return
+
+    contact_full_name = f"{contact['first_name']} {contact['last_name'] or ''}".strip()
+
+    confirm = input(f"Are you sure you want to delete {contact_full_name}? This cannot be undone. (y/n): ")
     if confirm.lower() == 'y':
         conn = connect_to_db()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
         conn.commit()
         conn.close()
-        print(f"Contact {full_name} has been deleted.")
+        print(f"Contact {contact_full_name} has been deleted.")
     else:
         print("Deletion cancelled.")
+
+
+def edit_contact(full_name):
+    """Finds a contact and allows the user to edit their name."""
+    contact_id = choose_contact(full_name)
+    if not contact_id:
+        return
+
+    # Get the current name for context
+    conn = connect_to_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT first_name, last_name FROM contacts WHERE id = ?", (contact_id,))
+    contact = cursor.fetchone()
+    conn.close()
+    if not contact:
+        print(f"Error: Could not retrieve contact with ID {contact_id}.")
+        return
+
+    current_full_name = f"{contact['first_name']} {contact['last_name'] or ''}".strip()
+    print(f"Editing contact: {current_full_name}")
+
+    new_first_name = input(f"Enter new first name (current: {contact['first_name']}): ").strip()
+    new_last_name = input(f"Enter new last name (current: {contact['last_name'] or ''}): ").strip()
+
+    if not new_first_name:
+        print("First name cannot be empty. Edit cancelled.")
+        return
+
+    # If last name is empty, it should be stored as NULL
+    if not new_last_name:
+        new_last_name = None
+
+    conn = connect_to_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE contacts SET first_name = ?, last_name = ? WHERE id = ?",
+        (new_first_name, new_last_name, contact_id)
+    )
+    conn.commit()
+    conn.close()
+
+    new_full_name = f"{new_first_name} {new_last_name or ''}".strip()
+    print(f"Successfully updated contact to '{new_full_name}'.")
+
 
 # --- Note and Reminder Functions ---
 
@@ -232,11 +335,11 @@ def _update_last_contacted(contact_id):
     conn.commit()
     conn.close()
 
+
 def add_note(full_name, message):
     """Adds a note for a specific contact."""
-    contact_id = find_contact_by_name(full_name)
+    contact_id = choose_contact(full_name)
     if not contact_id:
-        print(f"Contact '{full_name}' not found.")
         return
 
     conn = connect_to_db()
@@ -247,11 +350,11 @@ def add_note(full_name, message):
     _update_last_contacted(contact_id)
     print(f"Note added for {full_name}.")
 
+
 def log_interaction(full_name, message):
     """Logs an interaction with a contact and updates their last_contacted_at."""
-    contact_id = find_contact_by_name(full_name)
+    contact_id = choose_contact(full_name)
     if not contact_id:
-        print(f"Contact '{full_name}' not found.")
         return
 
     # We can log the interaction as a note
@@ -264,11 +367,11 @@ def log_interaction(full_name, message):
     _update_last_contacted(contact_id)
     print(f"Logged interaction for {full_name}.")
 
+
 def add_reminder(full_name, message, date_str):
     """Adds a reminder for a specific contact."""
-    contact_id = find_contact_by_name(full_name)
+    contact_id = choose_contact(full_name)
     if not contact_id:
-        print(f"Contact '{full_name}' not found.")
         return
 
     try:
@@ -291,9 +394,8 @@ def add_reminder(full_name, message, date_str):
 
 def add_tag_to_contact(full_name, tag_name):
     """Adds a tag to a specific contact."""
-    contact_id = find_contact_by_name(full_name)
+    contact_id = choose_contact(full_name)
     if not contact_id:
-        print(f"Contact '{full_name}' not found.")
         return
 
     conn = connect_to_db()
@@ -319,11 +421,11 @@ def add_tag_to_contact(full_name, tag_name):
     finally:
         conn.close()
 
+
 def remove_tag_from_contact(full_name, tag_name):
     """Removes a tag from a specific contact."""
-    contact_id = find_contact_by_name(full_name)
+    contact_id = choose_contact(full_name)
     if not contact_id:
-        print(f"Contact '{full_name}' not found.")
         return
 
     conn = connect_to_db()
@@ -475,6 +577,10 @@ def main():
     parser_delete = subparsers.add_parser("delete", help="Delete a contact.")
     parser_delete.add_argument("name", type=str, help="Contact's full name.")
 
+    # 'edit' command
+    parser_edit = subparsers.add_parser("edit", help="Edit a contact's name.")
+    parser_edit.add_argument("name", type=str, help="The full name of the contact to edit.")
+
     # 'tag' command
     parser_tag = subparsers.add_parser("tag", help="Add a tag to a contact.")
     parser_tag.add_argument("name", type=str, help="Contact's full name.")
@@ -525,6 +631,8 @@ def main():
         view_contact(args.name)
     elif args.command == "delete":
         delete_contact(args.name)
+    elif args.command == "edit":
+        edit_contact(args.name)
     elif args.command == "tag":
         add_tag_to_contact(args.name, args.tag_name)
     elif args.command == "untag":
