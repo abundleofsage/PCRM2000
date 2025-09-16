@@ -1,6 +1,8 @@
 import os
 import datetime
 from rich.console import Console
+from prompt_toolkit import prompt
+from prompt_toolkit.completion import WordCompleter
 from .database import get_db_connection, create_tables
 from .utils import is_valid_date, is_valid_email
 from .contacts import (
@@ -13,6 +15,7 @@ from .contacts import (
     add_pet_to_contact,
     add_partner_to_contact,
     advanced_search_contacts,
+    get_all_contact_names,
 )
 from .interactions import (
     add_note,
@@ -109,6 +112,13 @@ def show_status_dashboard():
     print("") # Add a blank line for spacing
     suggest_contacts()
 
+def prompt_for_contact_name(prompt_message):
+    """Prompts the user for a contact name with autocomplete."""
+    contact_names = get_all_contact_names()
+    completer = WordCompleter(contact_names, ignore_case=True)
+    return prompt(prompt_message, completer=completer).strip()
+
+
 def _handle_contact_management(choice, console, input_func):
     """Handles all logic for the Contact Management submenu."""
     if choice == '1':  # Add Contact
@@ -177,31 +187,31 @@ def _handle_contact_management(choice, console, input_func):
         else:
             console.print("No search criteria entered.", style="yellow")
     elif choice == '4':  # View Contact
-        name = input_func("Enter contact's full name to view: ")
+        name = prompt_for_contact_name("Enter contact's full name to view: ")
         view_contact(name)
     elif choice == '5':  # Edit Contact
-        name = input_func("Enter contact's full name to edit: ")
+        name = prompt_for_contact_name("Enter contact's full name to edit: ")
         edit_contact(name)
     elif choice == '6':  # Delete Contact
-        name = input_func("Enter contact's full name to delete: ")
+        name = prompt_for_contact_name("Enter contact's full name to delete: ")
         delete_contact(name)
     elif choice == '7':  # Tag Contact
-        name = input_func("Enter contact's full name to tag: ")
+        name = prompt_for_contact_name("Enter contact's full name to tag: ")
         tag = input_func("Enter the tag: ")
         add_tag_to_contact(name, tag)
     elif choice == '8':  # Untag Contact
-        name = input_func("Enter contact's full name to untag: ")
+        name = prompt_for_contact_name("Enter contact's full name to untag: ")
         tag = input_func("Enter the tag: ")
         remove_tag_from_contact(name, tag)
 
 def _handle_interactions_reminders(choice, console, input_func):
     """Handles all logic for the Interactions & Reminders submenu."""
     if choice == '9':  # Add Note
-        name = input_func("Enter contact's full name for the note: ")
+        name = prompt_for_contact_name("Enter contact's full name for the note: ")
         message = input_func("Enter the note: ")
         add_note(name, message)
     elif choice == '10':  # Add Reminder
-        name = input_func("Enter contact's full name for the reminder: ")
+        name = prompt_for_contact_name("Enter contact's full name for the reminder: ")
         message = input_func("Enter the reminder message: ")
         while True:
             date_str = input_func("Enter the reminder date (YYYY-MM-DD): ")
@@ -218,7 +228,7 @@ def _handle_interactions_reminders(choice, console, input_func):
                 end_time = start_time + datetime.timedelta(hours=1)
                 create_calendar_event(summary, start_time, end_time)
     elif choice == '11':  # Log Interaction
-        name = input_func("Enter contact's full name to log interaction: ")
+        name = prompt_for_contact_name("Enter contact's full name to log interaction: ")
         message = input_func("Enter the interaction details: ")
         log_interaction(name, message)
     elif choice == '12':  # List Reminders
@@ -231,7 +241,7 @@ def _handle_interactions_reminders(choice, console, input_func):
 def _handle_occasions_gifts(choice, console, input_func):
     """Handles all logic for the Occasions & Gifts submenu."""
     if choice == '15':  # Add Special Occasion
-        name = input_func("Enter contact's full name for the occasion: ")
+        name = prompt_for_contact_name("Enter contact's full name for the occasion: ")
         occasion_name = input_func("Enter the occasion name (e.g., Anniversary): ")
         while True:
             date_str = input_func("Enter the occasion date (YYYY-MM-DD): ")
@@ -248,10 +258,10 @@ def _handle_occasions_gifts(choice, console, input_func):
                 end_date = start_date + datetime.timedelta(days=1)
                 create_calendar_event(summary, start_date, end_date)
     elif choice == '16':  # View Special Occasions
-        name = input_func("Enter contact's full name to view occasions: ")
+        name = prompt_for_contact_name("Enter contact's full name to view occasions: ")
         view_occasions_for_contact(name)
     elif choice == '17':  # Add Gift
-        name = input_func("Enter contact's full name for the gift: ")
+        name = prompt_for_contact_name("Enter contact's full name for the gift: ")
         description = input_func("Enter the gift description: ")
         direction = input_func("Was the gift given or received? ")
         while True:
@@ -261,7 +271,7 @@ def _handle_occasions_gifts(choice, console, input_func):
             console.print("Invalid date format. Please use YYYY-MM-DD.", style="bold red")
         add_gift(name, description, direction, date_str)
     elif choice == '18':  # View Gifts
-        name = input_func("Enter contact's full name to view gifts: ")
+        name = prompt_for_contact_name("Enter contact's full name to view gifts: ")
         view_gifts_for_contact(name)
 
 def _handle_data_management(choice, console, input_func):

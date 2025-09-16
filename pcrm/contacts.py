@@ -76,6 +76,20 @@ def add_partner_to_contact(contact_id, name):
     except sqlite3.IntegrityError as e:
         print(f"Error: {e}")
 
+def get_all_contact_names():
+    """Fetches all contact full names from the database."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT first_name, last_name FROM contacts ORDER BY first_name, last_name")
+        contacts = cursor.fetchall()
+
+    names = []
+    for contact in contacts:
+        full_name = f"{contact['first_name']} {contact['last_name'] or ''}".strip()
+        names.append(full_name)
+    return names
+
+
 def find_contacts_by_name(full_name):
     """
     Finds contacts by name, case-insensitively.

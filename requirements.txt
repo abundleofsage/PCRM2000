@@ -1,3 +1,4 @@
 rich
 google-api-python-client
 google-auth-oauthlib
+prompt_toolkit
