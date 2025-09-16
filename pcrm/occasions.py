@@ -1,5 +1,5 @@
 import datetime
-from .database import connect_to_db
+from .database import get_db_connection
 from .contacts import choose_contact
 from rich.console import Console
 from rich.table import Table
@@ -9,20 +9,20 @@ def add_special_occasion(full_name, name, date_str):
     console = Console()
     contact_id = choose_contact(full_name)
     if not contact_id:
-        return
+        return None
 
     try:
-        datetime.datetime.strptime(date_str, '%Y-%m-%d')
+        occasion_date = datetime.datetime.strptime(date_str, '%Y-%m-%d')
     except ValueError:
         console.print("Error: Date must be in YYYY-MM-DD format.", style="bold red")
-        return
+        return None
 
-    conn = connect_to_db()
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO special_occasions (contact_id, name, date) VALUES (?, ?, ?)", (contact_id, name, date_str))
-    conn.commit()
-    conn.close()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO special_occasions (contact_id, name, date) VALUES (?, ?, ?)", (contact_id, name, date_str))
+        conn.commit()
     console.print(f"Special occasion '{name}' on {date_str} added for {full_name}.", style="green")
+    return occasion_date
 
 def add_gift(full_name, description, direction, date_str=None, occasion_id=None):
     """Adds a gift for a contact."""
@@ -38,14 +38,13 @@ def add_gift(full_name, description, direction, date_str=None, occasion_id=None)
             console.print("Error: Date must be in YYYY-MM-DD format.", style="bold red")
             return
 
-    conn = connect_to_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO gifts (contact_id, occasion_id, description, direction, date) VALUES (?, ?, ?, ?, ?)",
-        (contact_id, occasion_id, description, direction, date_str)
-    )
-    conn.commit()
-    conn.close()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO gifts (contact_id, occasion_id, description, direction, date) VALUES (?, ?, ?, ?, ?)",
+            (contact_id, occasion_id, description, direction, date_str)
+        )
+        conn.commit()
     console.print(f"Gift '{description}' ({direction}) added for {full_name}.", style="green")
 
 def view_occasions_for_contact(full_name):
@@ -55,11 +54,10 @@ def view_occasions_for_contact(full_name):
     if not contact_id:
         return
 
-    conn = connect_to_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, date FROM special_occasions WHERE contact_id = ? ORDER BY date", (contact_id,))
-    occasions = cursor.fetchall()
-    conn.close()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name, date FROM special_occasions WHERE contact_id = ? ORDER BY date", (contact_id,))
+        occasions = cursor.fetchall()
 
     if not occasions:
         console.print(f"No special occasions found for {full_name}.", style="yellow")
@@ -79,17 +77,16 @@ def view_gifts_for_contact(full_name):
     if not contact_id:
         return
 
-    conn = connect_to_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT g.description, g.direction, g.date, s.name as occasion_name
-        FROM gifts g
-        LEFT JOIN special_occasions s ON g.occasion_id = s.id
-        WHERE g.contact_id = ?
-        ORDER BY g.date DESC
-    """, (contact_id,))
-    gifts = cursor.fetchall()
-    conn.close()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT g.description, g.direction, g.date, s.name as occasion_name
+            FROM gifts g
+            LEFT JOIN special_occasions s ON g.occasion_id = s.id
+            WHERE g.contact_id = ?
+            ORDER BY g.date DESC
+        """, (contact_id,))
+        gifts = cursor.fetchall()
 
     if not gifts:
         console.print(f"No gifts found for {full_name}.", style="yellow")

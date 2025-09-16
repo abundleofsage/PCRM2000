@@ -1,5 +1,6 @@
 import sqlite3
 import datetime
+from contextlib import contextmanager
 
 # --- Datetime handling for SQLite ---
 # The default adapter is deprecated in Python 3.12
@@ -26,13 +27,25 @@ def connect_to_db():
     conn.row_factory = sqlite3.Row  # Allows accessing columns by name
     return conn
 
+@contextmanager
+def get_db_connection():
+    """
+    A context manager for handling database connections.
+    It ensures the connection is automatically closed.
+    """
+    conn = connect_to_db()
+    try:
+        yield conn
+    finally:
+        conn.close()
+
 def create_tables():
     """Creates the necessary database tables if they don't already exist."""
-    conn = connect_to_db()
-    cursor = conn.cursor()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
 
-    # Create contacts table
-    cursor.execute("""
+        # Create contacts table
+        cursor.execute("""
     CREATE TABLE IF NOT EXISTS contacts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         first_name TEXT NOT NULL,

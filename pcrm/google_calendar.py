@@ -62,34 +62,39 @@ def get_calendar_service():
         print(f"An error occurred building the service: {error}")
         return None
 
-def create_calendar_event(summary, start_datetime, end_datetime):
+def create_calendar_event(summary, start_time, end_time):
     """
     Creates an event on the user's primary Google Calendar.
 
     Args:
         summary (str): The title of the event.
-        start_datetime (datetime.datetime): The start time of the event.
-        end_datetime (datetime.datetime): The end time of the event.
+        start_time (datetime.datetime or datetime.date): The start time/date of the event.
+        end_time (datetime.datetime or datetime.date): The end time/date of the event.
     """
     service = get_calendar_service()
     if not service:
         print("Could not connect to Google Calendar. Event not created.")
         return
 
-    event = {
-        'summary': summary,
-        'start': {
-            'dateTime': start_datetime.isoformat(),
-            'timeZone': 'America/Los_Angeles', # TODO: Make this configurable
-        },
-        'end': {
-            'dateTime': end_datetime.isoformat(),
-            'timeZone': 'America/Los_Angeles', # TODO: Make this configurable
-        },
-    }
+    event = {'summary': summary}
+    if isinstance(start_time, datetime.datetime):
+        # It's a timed event
+        event['start'] = {
+            'dateTime': start_time.isoformat(),
+            'timeZone': 'America/Los_Angeles',  # TODO: Make this configurable
+        }
+        event['end'] = {
+            'dateTime': end_time.isoformat(),
+            'timeZone': 'America/Los_Angeles',  # TODO: Make this configurable
+        }
+    elif isinstance(start_time, datetime.date):
+        # It's an all-day event
+        event['start'] = {'date': start_time.isoformat()}
+        event['end'] = {'date': end_time.isoformat()}
+
 
     try:
-        event = service.events().insert(calendarId='primary', body=event).execute()
-        print(f"Event created: {event.get('htmlLink')}")
+        created_event = service.events().insert(calendarId='primary', body=event).execute()
+        print(f"Event created: {created_event.get('htmlLink')}")
     except HttpError as error:
         print(f"An error occurred creating the event: {error}")

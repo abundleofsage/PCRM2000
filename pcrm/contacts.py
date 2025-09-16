@@ -3,115 +3,105 @@ import datetime
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from .database import connect_to_db
+from .database import get_db_connection
 
 # This function is internal to the contacts module but will be used by other modules.
 def _update_last_contacted(contact_id):
     """Internal function to update the last_contacted_at timestamp for a contact."""
-    conn = connect_to_db()
-    cursor = conn.cursor()
-    now = datetime.datetime.now()
-    cursor.execute("UPDATE contacts SET last_contacted_at = ? WHERE id = ?", (now, contact_id))
-    conn.commit()
-    conn.close()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        now = datetime.datetime.now()
+        cursor.execute("UPDATE contacts SET last_contacted_at = ? WHERE id = ?", (now, contact_id))
+        conn.commit()
 
 def add_contact(first_name, last_name, email=None, birthday=None, date_met=None, how_met=None, favorite_color=None):
     """Adds a new contact to the database."""
-    conn = connect_to_db()
-    cursor = conn.cursor()
     now = datetime.datetime.now()
     try:
-        cursor.execute(
-            """INSERT INTO contacts
-               (first_name, last_name, email, birthday, date_met, how_met, favorite_color, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (first_name, last_name, email, birthday, date_met, how_met, favorite_color, now)
-        )
-        contact_id = cursor.lastrowid
-        conn.commit()
-        print(f"Successfully added {first_name} {last_name}.")
-        return contact_id
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """INSERT INTO contacts
+                   (first_name, last_name, email, birthday, date_met, how_met, favorite_color, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (first_name, last_name, email, birthday, date_met, how_met, favorite_color, now)
+            )
+            contact_id = cursor.lastrowid
+            conn.commit()
+            print(f"Successfully added {first_name} {last_name}.")
+            return contact_id
     except sqlite3.IntegrityError as e:
         print(f"Error: {e}")
         return None
-    finally:
-        conn.close()
 
 def add_phone_to_contact(contact_id, phone_number, phone_type):
     """Adds a phone number to a contact."""
-    conn = connect_to_db()
-    cursor = conn.cursor()
     try:
-        cursor.execute(
-            "INSERT INTO phones (contact_id, phone_number, phone_type) VALUES (?, ?, ?)",
-            (contact_id, phone_number, phone_type)
-        )
-        conn.commit()
-        print(f"Successfully added phone number to contact.")
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO phones (contact_id, phone_number, phone_type) VALUES (?, ?, ?)",
+                (contact_id, phone_number, phone_type)
+            )
+            conn.commit()
+            print(f"Successfully added phone number to contact.")
     except sqlite3.IntegrityError as e:
         print(f"Error: {e}")
-    finally:
-        conn.close()
 
 def add_pet_to_contact(contact_id, name):
     """Adds a pet to a contact."""
-    conn = connect_to_db()
-    cursor = conn.cursor()
     try:
-        cursor.execute(
-            "INSERT INTO pets (contact_id, name) VALUES (?, ?)",
-            (contact_id, name)
-        )
-        conn.commit()
-        print(f"Successfully added pet to contact.")
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO pets (contact_id, name) VALUES (?, ?)",
+                (contact_id, name)
+            )
+            conn.commit()
+            print(f"Successfully added pet to contact.")
     except sqlite3.IntegrityError as e:
         print(f"Error: {e}")
-    finally:
-        conn.close()
 
 def add_partner_to_contact(contact_id, name):
     """Adds a partner to a contact."""
-    conn = connect_to_db()
-    cursor = conn.cursor()
     try:
-        cursor.execute(
-            "INSERT INTO partners (contact_id, name) VALUES (?, ?)",
-            (contact_id, name)
-        )
-        conn.commit()
-        print(f"Successfully added partner to contact.")
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO partners (contact_id, name) VALUES (?, ?)",
+                (contact_id, name)
+            )
+            conn.commit()
+            print(f"Successfully added partner to contact.")
     except sqlite3.IntegrityError as e:
         print(f"Error: {e}")
-    finally:
-        conn.close()
 
 def find_contacts_by_name(full_name):
     """
     Finds contacts by name, case-insensitively.
     Returns a list of matching contacts (as sqlite3.Row objects).
     """
-    conn = connect_to_db()
-    cursor = conn.cursor()
-    name_parts = full_name.strip().split()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        name_parts = full_name.strip().split()
 
-    if len(name_parts) == 1:
-        # If one name is given, search both first and last names for an exact match
-        term = name_parts[0].lower()
-        cursor.execute(
-            "SELECT id, first_name, last_name FROM contacts WHERE LOWER(first_name) = ? OR LOWER(last_name) = ?",
-            (term, term)
-        )
-    else:
-        first_name = name_parts[0].lower()
-        last_name = ' '.join(name_parts[1:]).lower()
-        cursor.execute(
-            "SELECT id, first_name, last_name FROM contacts WHERE LOWER(first_name) = ? AND LOWER(last_name) = ?",
-            (first_name, last_name)
-        )
+        if len(name_parts) == 1:
+            # If one name is given, search both first and last names for an exact match
+            term = name_parts[0].lower()
+            cursor.execute(
+                "SELECT id, first_name, last_name FROM contacts WHERE LOWER(first_name) = ? OR LOWER(last_name) = ?",
+                (term, term)
+            )
+        else:
+            first_name = name_parts[0].lower()
+            last_name = ' '.join(name_parts[1:]).lower()
+            cursor.execute(
+                "SELECT id, first_name, last_name FROM contacts WHERE LOWER(first_name) = ? AND LOWER(last_name) = ?",
+                (first_name, last_name)
+            )
 
-    results = cursor.fetchall()
-    conn.close()
-    return results
+        results = cursor.fetchall()
+        return results
 
 def advanced_search_contacts(criteria):
     """
@@ -120,9 +110,6 @@ def advanced_search_contacts(criteria):
     Values will be searched for using a LIKE query.
     """
     console = Console()
-    conn = connect_to_db()
-    cursor = conn.cursor()
-
     base_query = "SELECT id, first_name, last_name, email, birthday, date_met, how_met, favorite_color FROM contacts"
     where_clauses = []
     params = []
@@ -140,14 +127,13 @@ def advanced_search_contacts(criteria):
     query = f"{base_query} WHERE {' AND '.join(where_clauses)} ORDER BY first_name, last_name"
 
     try:
-        cursor.execute(query, params)
-        contacts = cursor.fetchall()
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            contacts = cursor.fetchall()
     except sqlite3.Error as e:
         console.print(f"Database error: {e}", style="bold red")
-        conn.close()
         return
-
-    conn.close()
 
     if not contacts:
         console.print("No contacts found matching your criteria.", style="yellow")
@@ -171,25 +157,24 @@ def advanced_search_contacts(criteria):
 def list_contacts(tag_name=None):
     """Lists all contacts, optionally filtering by a tag."""
     console = Console()
-    conn = connect_to_db()
-    cursor = conn.cursor()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
 
-    if tag_name:
-        cursor.execute("""
-            SELECT c.id, c.first_name, c.last_name
-            FROM contacts c
-            JOIN contact_tags ct ON c.id = ct.contact_id
-            JOIN tags t ON ct.tag_id = t.id
-            WHERE t.name = ?
-            ORDER BY c.first_name, c.last_name
-        """, (tag_name,))
-        header = f"--- Contacts Tagged '{tag_name}' ---"
-    else:
-        cursor.execute("SELECT id, first_name, last_name FROM contacts ORDER BY first_name, last_name")
-        header = "--- Your Contacts ---"
+        if tag_name:
+            cursor.execute("""
+                SELECT c.id, c.first_name, c.last_name
+                FROM contacts c
+                JOIN contact_tags ct ON c.id = ct.contact_id
+                JOIN tags t ON ct.tag_id = t.id
+                WHERE t.name = ?
+                ORDER BY c.first_name, c.last_name
+            """, (tag_name,))
+            header = f"--- Contacts Tagged '{tag_name}' ---"
+        else:
+            cursor.execute("SELECT id, first_name, last_name FROM contacts ORDER BY first_name, last_name")
+            header = "--- Your Contacts ---"
 
-    contacts = cursor.fetchall()
-    conn.close()
+        contacts = cursor.fetchall()
 
     if not contacts:
         if tag_name:
@@ -246,25 +231,24 @@ def view_contact(full_name):
     if not contact_id:
         return
 
-    conn = connect_to_db()
-    cursor = conn.cursor()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
 
-    # Get all data in one go
-    cursor.execute("SELECT * FROM contacts WHERE id = ?", (contact_id,))
-    contact = cursor.fetchone()
-    cursor.execute("SELECT phone_number, phone_type FROM phones WHERE contact_id = ?", (contact_id,))
-    phones = cursor.fetchall()
-    cursor.execute("SELECT name FROM pets WHERE contact_id = ?", (contact_id,))
-    pets = cursor.fetchall()
-    cursor.execute("SELECT name FROM partners WHERE contact_id = ?", (contact_id,))
-    partners = cursor.fetchall()
-    cursor.execute("SELECT note_text, created_at FROM notes WHERE contact_id = ? ORDER BY created_at DESC", (contact_id,))
-    notes = cursor.fetchall()
-    cursor.execute("SELECT message, reminder_date FROM reminders WHERE contact_id = ? ORDER BY reminder_date ASC", (contact_id,))
-    reminders = cursor.fetchall()
-    cursor.execute("SELECT t.name FROM tags t JOIN contact_tags ct ON t.id = ct.tag_id WHERE ct.contact_id = ?", (contact_id,))
-    tags = [row['name'] for row in cursor.fetchall()]
-    conn.close()
+        # Get all data in one go
+        cursor.execute("SELECT * FROM contacts WHERE id = ?", (contact_id,))
+        contact = cursor.fetchone()
+        cursor.execute("SELECT phone_number, phone_type FROM phones WHERE contact_id = ?", (contact_id,))
+        phones = cursor.fetchall()
+        cursor.execute("SELECT name FROM pets WHERE contact_id = ?", (contact_id,))
+        pets = cursor.fetchall()
+        cursor.execute("SELECT name FROM partners WHERE contact_id = ?", (contact_id,))
+        partners = cursor.fetchall()
+        cursor.execute("SELECT note_text, created_at FROM notes WHERE contact_id = ? ORDER BY created_at DESC", (contact_id,))
+        notes = cursor.fetchall()
+        cursor.execute("SELECT message, reminder_date FROM reminders WHERE contact_id = ? ORDER BY reminder_date ASC", (contact_id,))
+        reminders = cursor.fetchall()
+        cursor.execute("SELECT t.name FROM tags t JOIN contact_tags ct ON t.id = ct.tag_id WHERE ct.contact_id = ?", (contact_id,))
+        tags = [row['name'] for row in cursor.fetchall()]
 
     # Main Details Panel
     last_contacted_str = contact['last_contacted_at'].strftime('%Y-%m-%d') if contact['last_contacted_at'] else '[red]Never[/red]'
@@ -332,11 +316,11 @@ def delete_contact(full_name):
         return
 
     # To get the name for the confirmation prompt, we need to fetch it.
-    conn = connect_to_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT first_name, last_name FROM contacts WHERE id = ?", (contact_id,))
-    contact = cursor.fetchone()
-    conn.close()
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT first_name, last_name FROM contacts WHERE id = ?", (contact_id,))
+        contact = cursor.fetchone()
+
     if not contact:
         print(f"Could not find contact with ID {contact_id} to delete.") # Should not happen
         return
@@ -345,11 +329,10 @@ def delete_contact(full_name):
 
     confirm = input(f"Are you sure you want to delete {contact_full_name}? This cannot be undone. (y/n): ")
     if confirm.lower() == 'y':
-        conn = connect_to_db()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
-        conn.commit()
-        conn.close()
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
+            conn.commit()
         print(f"Contact {contact_full_name} has been deleted.")
     else:
         print("Deletion cancelled.")
@@ -363,11 +346,10 @@ def edit_contact(full_name):
 
     while True:
         # Fetch fresh contact details each time in the loop
-        conn = connect_to_db()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM contacts WHERE id = ?", (contact_id,))
-        contact = cursor.fetchone()
-        conn.close()
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM contacts WHERE id = ?", (contact_id,))
+            contact = cursor.fetchone()
         if not contact:
             print(f"Error: Could not retrieve contact with ID {contact_id}.")
             return
@@ -391,54 +373,48 @@ def edit_contact(full_name):
             new_first_name = input(f"Enter new first name (current: {contact['first_name']}): ").strip()
             new_last_name = input(f"Enter new last name (current: {contact['last_name'] or ''}): ").strip()
             if new_first_name:
-                conn = connect_to_db()
-                cursor = conn.cursor()
-                cursor.execute("UPDATE contacts SET first_name = ?, last_name = ? WHERE id = ?",
-                               (new_first_name, new_last_name or None, contact_id))
-                conn.commit()
-                conn.close()
+                with get_db_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("UPDATE contacts SET first_name = ?, last_name = ? WHERE id = ?",
+                                   (new_first_name, new_last_name or None, contact_id))
+                    conn.commit()
                 print("Name updated.")
             else:
                 print("First name cannot be empty.")
         elif choice == '2':
             new_email = input(f"Enter new email (current: {contact['email'] or 'N/A'}): ").strip()
-            conn = connect_to_db()
-            cursor = conn.cursor()
-            cursor.execute("UPDATE contacts SET email = ? WHERE id = ?", (new_email, contact_id))
-            conn.commit()
-            conn.close()
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE contacts SET email = ? WHERE id = ?", (new_email, contact_id))
+                conn.commit()
             print("Email updated.")
         elif choice == '3':
             new_birthday = input(f"Enter new birthday (YYYY-MM-DD) (current: {contact['birthday'] or 'N/A'}): ").strip()
-            conn = connect_to_db()
-            cursor = conn.cursor()
-            cursor.execute("UPDATE contacts SET birthday = ? WHERE id = ?", (new_birthday, contact_id))
-            conn.commit()
-            conn.close()
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE contacts SET birthday = ? WHERE id = ?", (new_birthday, contact_id))
+                conn.commit()
             print("Birthday updated.")
         elif choice == '4':
             new_date_met = input(f"Enter new date met (YYYY-MM-DD) (current: {contact['date_met'] or 'N/A'}): ").strip()
-            conn = connect_to_db()
-            cursor = conn.cursor()
-            cursor.execute("UPDATE contacts SET date_met = ? WHERE id = ?", (new_date_met, contact_id))
-            conn.commit()
-            conn.close()
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE contacts SET date_met = ? WHERE id = ?", (new_date_met, contact_id))
+                conn.commit()
             print("Date met updated.")
         elif choice == '5':
             new_how_met = input(f"Enter new how met (current: {contact['how_met'] or 'N/A'}): ").strip()
-            conn = connect_to_db()
-            cursor = conn.cursor()
-            cursor.execute("UPDATE contacts SET how_met = ? WHERE id = ?", (new_how_met, contact_id))
-            conn.commit()
-            conn.close()
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE contacts SET how_met = ? WHERE id = ?", (new_how_met, contact_id))
+                conn.commit()
             print("How met updated.")
         elif choice == '6':
             new_favorite_color = input(f"Enter new favorite color (current: {contact['favorite_color'] or 'N/A'}): ").strip()
-            conn = connect_to_db()
-            cursor = conn.cursor()
-            cursor.execute("UPDATE contacts SET favorite_color = ? WHERE id = ?", (new_favorite_color, contact_id))
-            conn.commit()
-            conn.close()
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE contacts SET favorite_color = ? WHERE id = ?", (new_favorite_color, contact_id))
+                conn.commit()
             print("Favorite color updated.")
         elif choice == '7':
             phone_number = input("Enter phone number: ").strip()
