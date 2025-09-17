@@ -1,10 +1,8 @@
-from pcrm.ui import interactive_menu
-from pcrm.database import create_tables
+from pcrm.gui import main as run_gui
 
 def main():
     """Main function to run the application."""
-    create_tables()
-    interactive_menu()
+    run_gui()
 
 if __name__ == "__main__":
     main()
