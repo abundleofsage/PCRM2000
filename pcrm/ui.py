@@ -13,7 +13,9 @@ from .contacts import (
     delete_contact,
     add_phone_to_contact,
     add_pet_to_contact,
-    add_partner_to_contact,
+    add_relationship,
+    remove_relationship,
+    choose_contact,
     advanced_search_contacts,
     get_all_contact_names,
 )
@@ -163,13 +165,6 @@ def _handle_contact_management(choice, console, input_func):
                     add_pet_to_contact(contact_id, name)
                 else:
                     break
-            while True:
-                partner = input_func("Add a partner? (y/n): ").lower()
-                if partner == 'y':
-                    name = input_func("Enter partner's name: ").strip()
-                    add_partner_to_contact(contact_id, name)
-                else:
-                    break
     elif choice == '2':  # List Contacts
         tag = input_func("Enter tag to filter by (or press Enter for all): ").strip()
         list_contacts(tag if tag else None)
@@ -274,11 +269,42 @@ def _handle_occasions_gifts(choice, console, input_func):
         name = prompt_for_contact_name("Enter contact's full name to view gifts: ")
         view_gifts_for_contact(name)
 
+def _handle_relationship_management(choice, console, input_func):
+    """Handles all logic for the Relationship Management submenu."""
+    if choice == '19': # Add Relationship
+        console.print("--- Add Relationship ---", style="bold blue")
+        name1 = prompt_for_contact_name("Enter the first contact's name: ")
+        contact1_id = choose_contact(name1)
+        if not contact1_id:
+            return
+        name2 = prompt_for_contact_name("Enter the second contact's name: ")
+        contact2_id = choose_contact(name2)
+        if not contact2_id:
+            return
+        relationship_type = input_func("Enter the relationship type (e.g., Family, Friend, Colleague): ").strip()
+        if relationship_type:
+            add_relationship(contact1_id, contact2_id, relationship_type)
+        else:
+            console.print("Relationship type cannot be empty.", style="bold red")
+
+    elif choice == '20': # Remove Relationship
+        console.print("--- Remove Relationship ---", style="bold blue")
+        name1 = prompt_for_contact_name("Enter the first contact's name: ")
+        contact1_id = choose_contact(name1)
+        if not contact1_id:
+            return
+        name2 = prompt_for_contact_name("Enter the second contact's name: ")
+        contact2_id = choose_contact(name2)
+        if not contact2_id:
+            return
+        remove_relationship(contact1_id, contact2_id)
+
+
 def _handle_data_management(choice, console, input_func):
     """Handles all logic for the Data Management submenu."""
-    if choice == '19':  # Export
+    if choice == '21':  # Export
         export_data_to_csv()
-    elif choice == '20':  # Import
+    elif choice == '22':  # Import
         import_contacts_from_csv()
 
 def interactive_menu():
@@ -302,8 +328,11 @@ def interactive_menu():
             "15": "Add Special Occasion", "16": "View Special Occasions",
             "17": "Add Gift", "18": "View Gifts",
         },
+        "Relationship Management": {
+            "19": "Add Relationship", "20": "Remove Relationship",
+        },
         "Data Management": {
-            "19": "Export Data to CSV", "20": "Import Contacts from CSV",
+            "21": "Export Data to CSV", "22": "Import Contacts from CSV",
         }
     }
 
@@ -312,6 +341,7 @@ def interactive_menu():
         **{k: _handle_contact_management for k in menu["Contact Management"]},
         **{k: _handle_interactions_reminders for k in menu["Interactions & Reminders"]},
         **{k: _handle_occasions_gifts for k in menu["Occasions & Gifts"]},
+        **{k: _handle_relationship_management for k in menu["Relationship Management"]},
         **{k: _handle_data_management for k in menu["Data Management"]},
     }
 

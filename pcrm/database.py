@@ -81,13 +81,16 @@ def create_tables():
         );
         """)
 
-        # Create partners table
+        # Create relationships table
         cursor.execute("""
-        CREATE TABLE IF NOT EXISTS partners (
+        CREATE TABLE IF NOT EXISTS relationships (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            contact_id INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            FOREIGN KEY (contact_id) REFERENCES contacts (id) ON DELETE CASCADE
+            contact1_id INTEGER NOT NULL,
+            contact2_id INTEGER NOT NULL,
+            relationship_type TEXT NOT NULL,
+            FOREIGN KEY (contact1_id) REFERENCES contacts (id) ON DELETE CASCADE,
+            FOREIGN KEY (contact2_id) REFERENCES contacts (id) ON DELETE CASCADE,
+            UNIQUE (contact1_id, contact2_id)
         );
         """)
 

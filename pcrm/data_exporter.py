@@ -19,7 +19,7 @@ def export_data_to_csv():
             fieldnames = [
                 'contact_id', 'first_name', 'last_name', 'email', 'birthday',
                 'date_met', 'how_met', 'favorite_color', 'phones', 'pets',
-                'partners', 'notes', 'tags'
+                'notes', 'tags'
             ]
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
@@ -36,11 +36,6 @@ def export_data_to_csv():
                 cursor.execute("SELECT name FROM pets WHERE contact_id = ?", (contact_id,))
                 pets = cursor.fetchall()
                 pets_str = " | ".join([p['name'] for p in pets])
-
-                # Get partners
-                cursor.execute("SELECT name FROM partners WHERE contact_id = ?", (contact_id,))
-                partners = cursor.fetchall()
-                partners_str = " | ".join([p['name'] for p in partners])
 
                 # Get notes for the contact
                 cursor.execute("SELECT note_text FROM notes WHERE contact_id = ?", (contact_id,))
@@ -67,7 +62,6 @@ def export_data_to_csv():
                     'favorite_color': contact['favorite_color'],
                     'phones': phones_str,
                     'pets': pets_str,
-                    'partners': partners_str,
                     'notes': notes_str,
                     'tags': tags_str,
                 })

@@ -62,19 +62,59 @@ def add_pet_to_contact(contact_id, name):
     except sqlite3.IntegrityError as e:
         print(f"Error: {e}")
 
-def add_partner_to_contact(contact_id, name):
-    """Adds a partner to a contact."""
+def add_relationship(contact1_id, contact2_id, relationship_type):
+    """Adds a relationship between two contacts."""
+    if contact1_id == contact2_id:
+        print("A contact cannot have a relationship with themselves.")
+        return
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
+            # Ensure the relationship is stored consistently (lower ID first)
+            if contact1_id > contact2_id:
+                contact1_id, contact2_id = contact2_id, contact1_id
             cursor.execute(
-                "INSERT INTO partners (contact_id, name) VALUES (?, ?)",
-                (contact_id, name)
+                "INSERT INTO relationships (contact1_id, contact2_id, relationship_type) VALUES (?, ?, ?)",
+                (contact1_id, contact2_id, relationship_type)
             )
             conn.commit()
-            print(f"Successfully added partner to contact.")
-    except sqlite3.IntegrityError as e:
-        print(f"Error: {e}")
+            print(f"Successfully added relationship.")
+    except sqlite3.IntegrityError:
+        print(f"Error: This relationship already exists.")
+
+def remove_relationship(contact1_id, contact2_id):
+    """Removes a relationship between two contacts."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            # Ensure the relationship is found regardless of order
+            if contact1_id > contact2_id:
+                contact1_id, contact2_id = contact2_id, contact1_id
+            cursor.execute(
+                "DELETE FROM relationships WHERE contact1_id = ? AND contact2_id = ?",
+                (contact1_id, contact2_id)
+            )
+            conn.commit()
+            if cursor.rowcount > 0:
+                print(f"Successfully removed relationship.")
+            else:
+                print(f"No relationship found to remove.")
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
+
+def get_relationships_for_contact(contact_id):
+    """Fetches all relationships for a given contact."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT
+                r.relationship_type,
+                c.id, c.first_name, c.last_name
+            FROM relationships r
+            JOIN contacts c ON (c.id = r.contact2_id OR c.id = r.contact1_id)
+            WHERE (r.contact1_id = ? OR r.contact2_id = ?) AND c.id != ?
+        """, (contact_id, contact_id, contact_id))
+        return cursor.fetchall()
 
 def get_all_contact_names():
     """Fetches all contact full names from the database."""
@@ -255,8 +295,7 @@ def view_contact(full_name):
         phones = cursor.fetchall()
         cursor.execute("SELECT name FROM pets WHERE contact_id = ?", (contact_id,))
         pets = cursor.fetchall()
-        cursor.execute("SELECT name FROM partners WHERE contact_id = ?", (contact_id,))
-        partners = cursor.fetchall()
+        relationships = get_relationships_for_contact(contact_id)
         cursor.execute("SELECT note_text, created_at FROM notes WHERE contact_id = ? ORDER BY created_at DESC", (contact_id,))
         notes = cursor.fetchall()
         cursor.execute("SELECT message, reminder_date FROM reminders WHERE contact_id = ? ORDER BY reminder_date ASC", (contact_id,))
@@ -299,11 +338,12 @@ def view_contact(full_name):
             table.add_row(pet['name'])
         console.print(table)
 
-    if partners:
-        table = Table(title="Partners", show_header=True, header_style="bold green")
-        table.add_column("Name")
-        for partner in partners:
-            table.add_row(partner['name'])
+    if relationships:
+        table = Table(title="Relationships", show_header=True, header_style="bold green")
+        table.add_column("Contact")
+        table.add_column("Relationship")
+        for rel in relationships:
+            table.add_row(f"{rel['first_name']} {rel['last_name'] or ''}", rel['relationship_type'])
         console.print(table)
 
     if notes:
@@ -378,8 +418,7 @@ def edit_contact(full_name):
         print("6. Edit Favorite Color")
         print("7. Add Phone Number")
         print("8. Add Pet")
-        print("9. Add Partner")
-        print("10. Back to Main Menu")
+        print("9. Back to Main Menu")
 
         choice = input("What would you like to edit? ")
 
@@ -440,10 +479,6 @@ def edit_contact(full_name):
             if pet_name:
                 add_pet_to_contact(contact_id, pet_name)
         elif choice == '9':
-            partner_name = input("Enter partner's name: ").strip()
-            if partner_name:
-                add_partner_to_contact(contact_id, partner_name)
-        elif choice == '10':
             break
         else:
             print("Invalid choice. Please try again.")

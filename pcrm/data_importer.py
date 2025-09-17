@@ -1,7 +1,7 @@
 import csv
 import os
 import re
-from .contacts import add_contact, add_phone_to_contact, add_pet_to_contact, add_partner_to_contact
+from .contacts import add_contact, add_phone_to_contact, add_pet_to_contact
 
 def import_contacts_from_csv():
     """Imports contacts from a CSV file named 'pcrm_import.csv'."""
@@ -66,12 +66,6 @@ def import_contacts_from_csv():
                         for pet_name in contact_data['pets'].split('|'):
                             if pet_name.strip():
                                 add_pet_to_contact(contact_id, pet_name.strip())
-
-                    # Import partners
-                    if contact_data.get('partners'):
-                        for partner_name in contact_data['partners'].split('|'):
-                            if partner_name.strip():
-                                add_partner_to_contact(contact_id, partner_name.strip())
 
                     count += 1
 
