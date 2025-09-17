@@ -18,6 +18,7 @@ class App(tk.Tk):
         super().__init__()
         self.title("pCRM")
         self.geometry("1200x800")
+        self._dragged_node = None
 
         # Create the tab control
         self.notebook = ttk.Notebook(self)
@@ -1194,6 +1195,8 @@ class App(tk.Tk):
         self.canvas = FigureCanvasTkAgg(self.graph_figure, master=graph_frame)
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         self.canvas.mpl_connect('button_press_event', self.on_graph_click)
+        self.canvas.mpl_connect('motion_notify_event', self.on_graph_motion)
+        self.canvas.mpl_connect('button_release_event', self.on_graph_release)
 
 
     def populate_relationship_graph(self):
@@ -1225,8 +1228,15 @@ class App(tk.Tk):
             if rel['contact1_id'] in self.G and rel['contact2_id'] in self.G:
                 self.G.add_edge(rel['contact1_id'], rel['contact2_id'], label=rel['relationship_type'])
 
-        # Draw the graph
-        self.graph_pos = nx.spring_layout(self.G, k=0.8, iterations=50) # Increase k for more space
+        # Calculate layout only if it hasn't been calculated before
+        if self.graph_pos is None:
+            self.graph_pos = nx.spring_layout(self.G, k=0.8, iterations=50)
+        self._redraw_graph()
+
+
+    def _redraw_graph(self):
+        """Clears and redraws the graph."""
+        self.graph_ax.clear()
         labels = nx.get_node_attributes(self.G, 'name')
         edge_labels = nx.get_edge_attributes(self.G, 'label')
 
@@ -1239,19 +1249,41 @@ class App(tk.Tk):
         self.graph_figure.tight_layout()
         self.canvas.draw()
 
+    def _get_node_at_event(self, event):
+        """Finds the node at the event's coordinates, if any."""
+        if self.graph_pos is None or event.xdata is None or event.ydata is None:
+            return None
+
+        for node_id, (x, y) in self.graph_pos.items():
+            dist = ((event.xdata - x)**2 + (event.ydata - y)**2)**0.5
+            if dist < 0.1: # This threshold might need adjustment
+                return node_id
+        return None
+
     def on_graph_click(self, event):
         """Handler for clicking on the relationship graph."""
         if event.inaxes != self.graph_ax or self.graph_pos is None:
             return
 
-        # Check if the click is near any node
-        for node_id, (x, y) in self.graph_pos.items():
-            # Calculate distance from click to node
-            dist = ((event.xdata - x)**2 + (event.ydata - y)**2)**0.5
-            # This threshold might need adjustment depending on DPI and node size
-            if dist < 0.1:
-                self._view_contact_details_by_id(node_id)
-                return # Stop after finding the first clicked node
+        node_id = self._get_node_at_event(event)
+        if not node_id:
+            return
+
+        if event.dblclick:
+            self._view_contact_details_by_id(node_id)
+        else:
+            self._dragged_node = node_id
+
+    def on_graph_motion(self, event):
+        """Handler for mouse motion on the graph."""
+        if self._dragged_node is None or event.inaxes != self.graph_ax or event.xdata is None:
+            return
+        self.graph_pos[self._dragged_node] = (event.xdata, event.ydata)
+        self._redraw_graph()
+
+    def on_graph_release(self, event):
+        """Handler for releasing the mouse button on the graph."""
+        self._dragged_node = None
 
 
 def main():
