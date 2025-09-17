@@ -19,6 +19,8 @@ class App(tk.Tk):
         self.title("pCRM")
         self.geometry("1200x800")
         self._dragged_node = None
+        self._sort_column = "first_name"
+        self._sort_direction = "asc"
 
         # Create the tab control
         self.notebook = ttk.Notebook(self)
@@ -639,7 +641,7 @@ class App(tk.Tk):
         tree_frame.grid_columnconfigure(0, weight=1)
 
         columns = ["ID", "First Name", "Last Name", "Email", "Birthday", "Tags", "Time Known", "Last Seen"]
-        self.contacts_tree = self._create_treeview(tree_frame, columns)
+        self.contacts_tree = self._create_treeview(tree_frame, columns, self.sort_contacts)
         self.contacts_tree.column("ID", width=40, anchor="center")
         self.contacts_tree.column("Time Known", anchor="e")
         self.contacts_tree.column("Last Seen", anchor="e")
@@ -686,6 +688,16 @@ class App(tk.Tk):
         search_query = self.search_var.get().strip()
         self.populate_contacts_tree(search_query=search_query)
 
+    def sort_contacts(self, col):
+        """Sorts the contacts treeview by the clicked column."""
+        if self._sort_column == col:
+            self._sort_direction = "desc" if self._sort_direction == "asc" else "asc"
+        else:
+            self._sort_column = col
+            self._sort_direction = "asc"
+        self.populate_contacts_tree()
+
+
     def populate_contacts_tree(self, search_query=None, tag_filter=None, clear_filters=False):
         """Fetches contact data and populates the contacts treeview, with optional filters."""
         if clear_filters:
@@ -723,7 +735,17 @@ class App(tk.Tk):
         if where_clauses:
             query += " WHERE " + " AND ".join(where_clauses)
 
-        query += " GROUP BY c.id ORDER BY c.first_name, c.last_name"
+        # Map display names to database columns
+        sort_map = {
+            "ID": "c.id", "First Name": "c.first_name", "Last Name": "c.last_name",
+            "Email": "c.email", "Birthday": "c.birthday", "Tags": "tags",
+            "Time Known": "c.date_met", "Last Seen": "c.last_contacted_at"
+        }
+        sort_col_db = sort_map.get(self._sort_column, "c.first_name")
+
+
+        query += f" GROUP BY c.id ORDER BY {sort_col_db} {self._sort_direction.upper()}"
+
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -1124,11 +1146,15 @@ class App(tk.Tk):
                 cursor.execute("DELETE FROM contact_tags WHERE contact_id = ? AND tag_id = ?", (contact_id, tag['id']))
                 conn.commit()
 
-    def _create_treeview(self, parent, columns):
-        """Helper function to create a treeview."""
+    def _create_treeview(self, parent, columns, sort_callback=None):
+        """Helper function to create a treeview, with optional sorting."""
         tree = ttk.Treeview(parent, columns=columns, show="headings")
         for col in columns:
-            tree.heading(col, text=col)
+            if sort_callback:
+                # The lambda needs to capture the column name for the callback
+                tree.heading(col, text=col, command=lambda c=col: sort_callback(c))
+            else:
+                tree.heading(col, text=col)
             tree.column(col, anchor="w")
         tree.pack(fill="both", expand=True)
         return tree
