@@ -40,41 +40,36 @@ def add_random_pets_to_contact(contact_id, fake_generator):
             pet_name = fake_generator.first_name()
             contacts.add_pet_to_contact(contact_id, pet_name)
 
-def add_random_notes_to_contact(contact_id, fake_generator):
+def add_random_notes_to_contact(full_name, contact_id, fake_generator):
     """Adds a random number of notes to a contact."""
-    full_name = get_contact_name(contact_id)
     for _ in range(random.randint(0, 5)):
         note = fake_generator.sentence(nb_words=10)
         interactions.add_note(full_name, note)
 
-def add_random_reminders_to_contact(contact_id, fake_generator):
+def add_random_reminders_to_contact(full_name, contact_id, fake_generator):
     """Adds a random number of reminders to a contact."""
-    full_name = get_contact_name(contact_id)
     for _ in range(random.randint(0, 2)):
         message = fake_generator.sentence(nb_words=6)
         reminder_date = fake_generator.future_date(end_date="+1y")
         interactions.add_reminder(full_name, message, reminder_date.strftime('%Y-%m-%d'))
 
-def add_random_special_occasions(contact_id, fake_generator):
+def add_random_special_occasions(full_name, contact_id, fake_generator):
     """Adds a random number of special occasions to a contact."""
-    full_name = get_contact_name(contact_id)
     for _ in range(random.randint(0, 3)):
         occasion_name = random.choice(["Anniversary", "Work Anniversary", "Graduation"])
         occasion_date = fake_generator.date_this_decade()
         occasions.add_special_occasion(full_name, occasion_name, occasion_date.strftime('%Y-%m-%d'))
 
-def add_random_gifts(contact_id, fake_generator):
+def add_random_gifts(full_name, contact_id, fake_generator):
     """Adds a random number of gifts to a contact."""
-    full_name = get_contact_name(contact_id)
     for _ in range(random.randint(0, 4)):
         description = "A nice gift"
         direction = random.choice(["given", "received"])
         gift_date = fake_generator.date_this_decade()
         occasions.add_gift(full_name, description, direction, gift_date.strftime('%Y-%m-%d'))
 
-def add_random_tags_to_contact(contact_id, tag_options):
+def add_random_tags_to_contact(full_name, contact_id, tag_options):
     """Adds a random number of tags to a contact."""
-    full_name = get_contact_name(contact_id)
     for _ in range(random.randint(1, 3)):
         tag = random.choice(tag_options)
         tags.add_tag_to_contact(full_name, tag)
@@ -99,15 +94,11 @@ def get_contact_name(contact_id):
 def run_simulator(num_contacts=50):
     """Main function to run the data simulator."""
     print("Starting data simulation...")
-    database.create_tables()
 
-    # Create a pool of tags to use
-    tag_options = ["family", "friend", "work", "client", "acquaintance", "vip"]
-    for tag_name in tag_options:
-        with database.get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag_name,))
-            conn.commit()
+    # Ensure default tags are in the database
+    tags.initialize_default_tags()
+    tag_options = tags.DEFAULT_TAGS
+
 
     # Generate contacts
     contact_ids = []
@@ -116,13 +107,14 @@ def run_simulator(num_contacts=50):
         contact_id = create_random_contact(fake)
         if contact_id:
             contact_ids.append(contact_id)
+            full_name = get_contact_name(contact_id)
             add_random_phones_to_contact(contact_id, fake)
             add_random_pets_to_contact(contact_id, fake)
-            add_random_notes_to_contact(contact_id, fake)
-            add_random_reminders_to_contact(contact_id, fake)
-            add_random_special_occasions(contact_id, fake)
-            add_random_gifts(contact_id, fake)
-            add_random_tags_to_contact(contact_id, tag_options)
+            add_random_notes_to_contact(full_name, contact_id, fake)
+            add_random_reminders_to_contact(full_name, contact_id, fake)
+            add_random_special_occasions(full_name, contact_id, fake)
+            add_random_gifts(full_name, contact_id, fake)
+            add_random_tags_to_contact(full_name, contact_id, tag_options)
 
     # Generate relationships
     print("Creating relationships...")

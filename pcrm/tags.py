@@ -30,6 +30,21 @@ def add_tag_to_contact(full_name, tag_name):
         print(f"'{full_name}' is already tagged with '{tag_name}'.")
 
 
+DEFAULT_TAGS = ["family", "friend", "work", "client", "acquaintance", "vip"]
+
+
+def initialize_default_tags():
+    """Ensures the default tags exist in the database."""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            for tag_name in DEFAULT_TAGS:
+                cursor.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag_name,))
+            conn.commit()
+    except sqlite3.Error as e:
+        print(f"Database error during tag initialization: {e}")
+
+
 def remove_tag_from_contact(full_name, tag_name):
     """Removes a tag from a specific contact."""
     contact_id = choose_contact(full_name)
