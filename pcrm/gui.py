@@ -445,7 +445,7 @@ class App(tk.Tk):
             cursor.execute("SELECT created_at, note_text FROM notes WHERE contact_id = ? ORDER BY created_at DESC", (contact_id,))
             notes = cursor.fetchall()
             for note in notes:
-                self.notes_tree.insert("", "end", values=(note['created_at'][:10], note['note_text']))
+                self.notes_tree.insert("", "end", values=(note['created_at'].strftime('%Y-%m-%d'), note['note_text']))
 
             # Populate reminders
             cursor.execute("SELECT reminder_date, message FROM reminders WHERE contact_id = ? ORDER BY reminder_date ASC", (contact_id,))
@@ -859,7 +859,7 @@ class App(tk.Tk):
             f"Date Met: {contact['date_met'] or 'N/A'}\n"
             f"How Met: {contact['how_met'] or 'N/A'}\n"
             f"Favorite Color: {contact['favorite_color'] or 'N/A'}\n"
-            f"Last Contacted: {contact['last_contacted_at'][:10] if contact['last_contacted_at'] else 'Never'}\n"
+            f"Last Contacted: {contact['last_contacted_at'].strftime('%Y-%m-%d') if contact['last_contacted_at'] else 'Never'}\n"
             f"Tags: {', '.join(tags) if tags else 'None'}"
         )
         ttk.Label(details_frame, text=details_text, justify=tk.LEFT).pack(anchor="w")
@@ -884,7 +884,9 @@ class App(tk.Tk):
         if relationships:
             rel_data = [{'contact': f"{r['first_name']} {r['last_name'] or ''}", 'type': r['relationship_type']} for r in relationships]
             create_tab_with_tree("Relationships", ['contact', 'type'], rel_data)
-        if notes: create_tab_with_tree("Notes", ['created_at', 'note_text'], notes)
+        if notes:
+            formatted_notes = [{'created_at': n['created_at'].strftime('%Y-%m-%d %H:%M'), 'note_text': n['note_text']} for n in notes]
+            create_tab_with_tree("Notes", ['created_at', 'note_text'], formatted_notes)
         if reminders: create_tab_with_tree("Reminders", ['reminder_date', 'message'], reminders)
 
         win.transient(self); win.grab_set(); self.wait_window(win)
