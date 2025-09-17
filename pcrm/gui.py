@@ -36,14 +36,17 @@ class App(tk.Tk):
 
         self.notebook.pack(expand=True, fill="both")
 
+        # 1. Set up all UI elements first
         self.setup_dashboard_tab()
-        self.populate_dashboard()
         self.setup_contacts_tab()
-        self.populate_contacts_tree()
         self.setup_interactions_tab()
         self.setup_occasions_tab()
         self.setup_relationships_tab()
         self.setup_data_tab()
+
+        # 2. Then, populate the UI with data
+        self.populate_dashboard()
+        self.populate_contacts_tree()
 
     def setup_relationships_tab(self):
         """Sets up the widgets for the relationship management tab."""
