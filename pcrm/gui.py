@@ -736,21 +736,24 @@ class App(tk.Tk):
             time_known_str = "N/A"
             if contact['date_met']:
                 try:
-                    date_met_obj = datetime.datetime.strptime(contact['date_met'], '%Y-%m-%d').date()
+                    # The database connection already converts this to a datetime object.
+                    date_met_obj = contact['date_met'].date()
                     delta = today - date_met_obj
                     time_known_str = f"{delta.days} days"
-                except (ValueError, TypeError):
+                except (ValueError, TypeError, AttributeError):
+                    # AttributeError can happen if date_met is not a datetime object
                     pass # Keep as N/A if format is wrong
 
             # Calculate time since last seen
             last_seen_str = "N/A"
             if contact['last_contacted_at']:
                 try:
-                    # The timestamp might be in ISO format 'YYYY-MM-DD HH:MM:SS.ffffff'
-                    last_contacted_obj = datetime.datetime.fromisoformat(contact['last_contacted_at']).date()
+                    # The database connection already converts this to a datetime object.
+                    last_contacted_obj = contact['last_contacted_at'].date()
                     delta = today - last_contacted_obj
                     last_seen_str = f"{delta.days} days ago"
-                except (ValueError, TypeError):
+                except (ValueError, TypeError, AttributeError):
+                    # AttributeError can happen if last_contacted_at is not a datetime object
                     pass # Keep as N/A
 
             values = (
@@ -922,13 +925,16 @@ class App(tk.Tk):
         details_frame = ttk.LabelFrame(win, text="Contact Details", padding="10")
         details_frame.pack(fill="x", padx=10, pady=5)
 
+        date_met_str = contact['date_met'].strftime('%Y-%m-%d') if isinstance(contact['date_met'], datetime.datetime) else (contact['date_met'] or 'N/A')
+        last_contacted_str = contact['last_contacted_at'].strftime('%Y-%m-%d') if contact['last_contacted_at'] else 'Never'
+
         details_text = (
             f"Email: {contact['email'] or 'N/A'}\n"
             f"Birthday: {contact['birthday'] or 'N/A'}\n"
-            f"Date Met: {contact['date_met'] or 'N/A'}\n"
+            f"Date Met: {date_met_str}\n"
             f"How Met: {contact['how_met'] or 'N/A'}\n"
             f"Favorite Color: {contact['favorite_color'] or 'N/A'}\n"
-            f"Last Contacted: {contact['last_contacted_at'].strftime('%Y-%m-%d') if contact['last_contacted_at'] else 'Never'}\n"
+            f"Last Contacted: {last_contacted_str}\n"
             f"Tags: {', '.join(tags) if tags else 'None'}"
         )
         ttk.Label(details_frame, text=details_text, justify=tk.LEFT).pack(anchor="w")
