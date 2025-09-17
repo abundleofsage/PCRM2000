@@ -285,8 +285,6 @@ class App(tk.Tk):
         self.reminders_tree = self._create_treeview(reminders_frame, ["Date", "Message"])
         self.reminders_tree.column("Message", width=300)
 
-        self._refresh_contact_combos()
-
     def _refresh_contact_combos(self):
         """Refreshes the list of contacts in all contact selection comboboxes."""
         with get_db_connection() as conn:
