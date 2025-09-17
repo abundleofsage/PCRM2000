@@ -50,9 +50,11 @@ def create_tables():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             first_name TEXT NOT NULL,
             last_name TEXT,
+            chosen_name TEXT,
+            pronouns TEXT,
             email TEXT,
             birthday DATE,
-            date_met TIMESTAMP,
+            date_met DATE,
             how_met TEXT,
             favorite_color TEXT,
             last_contacted_at TIMESTAMP,
@@ -160,5 +162,34 @@ def create_tables():
             FOREIGN KEY (occasion_id) REFERENCES special_occasions (id) ON DELETE SET NULL
         );
         """)
+
+        conn.commit()
+
+
+def migrate_db():
+    """
+    Applies any necessary schema migrations to the database.
+    This is designed to be safe to run multiple times.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+
+        # Get the list of columns in the contacts table
+        cursor.execute("PRAGMA table_info(contacts)")
+        columns = [row['name'] for row in cursor.fetchall()]
+
+        # Add chosen_name column if it doesn't exist
+        if 'chosen_name' not in columns:
+            print("Migrating database: Adding 'chosen_name' to contacts.")
+            cursor.execute("ALTER TABLE contacts ADD COLUMN chosen_name TEXT")
+
+        # Add pronouns column if it doesn't exist
+        if 'pronouns' not in columns:
+            print("Migrating database: Adding 'pronouns' to contacts.")
+            cursor.execute("ALTER TABLE contacts ADD COLUMN pronouns TEXT")
+
+        # Note: Changing column types in SQLite is complex.
+        # For date_met (TIMESTAMP -> DATE), we rely on SQLite's flexible typing.
+        # New data will be stored as DATE, and old data should still be readable.
 
         conn.commit()

@@ -4,3 +4,4 @@ google-auth-oauthlib
 prompt_toolkit
 networkx
 matplotlib
+Faker

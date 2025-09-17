@@ -6,9 +6,10 @@ import re
 import sqlite3
 from .database import get_db_connection
 from . import contacts
-from . import data_exporter
+from . import data_exporter, data_importer
 from .google_calendar import create_calendar_event
 import networkx as nx
+import numpy as np
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
@@ -152,10 +153,10 @@ class App(tk.Tk):
         data_frame = ttk.Frame(self.data_tab, padding="20")
         data_frame.pack(fill="both", expand=True)
 
-        import_button = ttk.Button(data_frame, text="Import from CSV...", command=self.import_data, style="Accent.TButton")
+        import_button = ttk.Button(data_frame, text="Import from JSON...", command=self.import_data, style="Accent.TButton")
         import_button.pack(pady=10)
 
-        export_button = ttk.Button(data_frame, text="Export to CSV...", command=self.export_data)
+        export_button = ttk.Button(data_frame, text="Export to JSON...", command=self.export_data)
         export_button.pack(pady=10)
 
         # Add a style for the accent button
@@ -163,64 +164,41 @@ class App(tk.Tk):
         style.configure("Accent.TButton", font=("Helvetica", 10, "bold"))
 
     def export_data(self):
-        """Exports all contact data to a CSV file."""
+        """Exports all application data to a JSON file."""
         try:
-            data_exporter.export_data_to_csv()
-            messagebox.showinfo("Export Successful", "Successfully exported all data to pcrm_export.csv")
+            data_exporter.export_data_to_json(self)
+            messagebox.showinfo("Export Successful", "Successfully exported all data to pcrm_export.json")
         except Exception as e:
             messagebox.showerror("Export Failed", f"An error occurred during export: {e}")
 
     def import_data(self):
-        """Imports contacts from a user-selected CSV file."""
+        """Imports application data from a user-selected JSON file, replacing all current data."""
         filepath = filedialog.askopenfilename(
-            title="Select a CSV file to import",
-            filetypes=(("CSV files", "*.csv"), ("All files", "*.*"))
+            title="Select a JSON file to import",
+            filetypes=(("JSON files", "*.json"), ("All files", "*.*"))
         )
         if not filepath:
             return
 
+        if not messagebox.askyesno("Confirm Import", "This will replace all current data. Are you sure you want to proceed?"):
+            return
+
         try:
-            with open(filepath, 'r', newline='', encoding='utf-8') as csvfile:
-                reader = csv.DictReader(csvfile)
-                if 'first_name' not in reader.fieldnames:
-                    messagebox.showerror("Import Error", "CSV file must have a 'first_name' column.")
-                    return
+            graph_layout = data_importer.import_data_from_json(filepath)
 
-                contacts_to_add = [row for row in reader if row.get('first_name', '').strip()]
+            # Restore the graph layout
+            if graph_layout:
+                self.graph_pos = {int(k): np.array(v) for k, v in graph_layout.items()}
+            else:
+                self.graph_pos = None # Reset layout if not in file
 
-            if not contacts_to_add:
-                messagebox.showinfo("Import", "No new contacts to import from the file.")
-                return
+            messagebox.showinfo("Import Successful", "Successfully imported data. Refreshing application...")
 
-            if not messagebox.askyesno("Confirm Import", f"Found {len(contacts_to_add)} contacts to import. Proceed?"):
-                return
-
-            count = 0
-            for contact_data in contacts_to_add:
-                contact_id = contacts.add_contact(
-                    first_name=contact_data['first_name'],
-                    last_name=contact_data.get('last_name') or None,
-                    email=contact_data.get('email') or None,
-                    birthday=contact_data.get('birthday') or None,
-                    date_met=contact_data.get('date_met') or None,
-                    how_met=contact_data.get('how_met') or None,
-                    favorite_color=contact_data.get('favorite_color') or None
-                )
-                if contact_id:
-                    if contact_data.get('phones'):
-                        for match in re.finditer(r'([^|]+)\(([^)]+)\)', contact_data['phones']):
-                            number, type = match.groups()
-                            contacts.add_phone_to_contact(contact_id, number.strip(), type.strip())
-                    if contact_data.get('pets'):
-                        for pet_name in contact_data['pets'].split('|'):
-                            if pet_name.strip():
-                                contacts.add_pet_to_contact(contact_id, pet_name.strip())
-                    count += 1
-
-            messagebox.showinfo("Import Successful", f"Successfully imported {count} contacts.")
-            # Refresh all views
-            self.populate_contacts_tree()
+            # Refresh all views to show the new data
+            self.populate_contacts_tree(clear_filters=True)
+            self.populate_relationship_graph()
             self.populate_dashboard()
+            self._refresh_contact_combos()
 
         except Exception as e:
             messagebox.showerror("Import Failed", f"An error occurred during import: {e}")
@@ -712,7 +690,7 @@ class App(tk.Tk):
         # Base query with all columns and tag aggregation
         query = """
             SELECT
-                c.id, c.first_name, c.last_name, c.email, c.birthday, c.date_met, c.last_contacted_at,
+                c.id, c.first_name, c.last_name, c.chosen_name, c.pronouns, c.email, c.birthday, c.date_met, c.last_contacted_at,
                 GROUP_CONCAT(t.name) AS tags
             FROM contacts c
             LEFT JOIN contact_tags ct ON c.id = ct.contact_id
@@ -758,13 +736,22 @@ class App(tk.Tk):
             time_known_str = "N/A"
             if contact['date_met']:
                 try:
-                    # The database connection already converts this to a datetime object.
-                    date_met_obj = contact['date_met'].date()
+                    date_str = contact['date_met']
+                    # Handle both datetime objects and string dates
+                    if isinstance(date_str, datetime.datetime):
+                        date_met_obj = date_str.date()
+                    else:
+                        date_met_obj = datetime.datetime.strptime(str(date_str), '%Y-%m-%d').date()
+
                     delta = today - date_met_obj
-                    time_known_str = f"{delta.days} days"
+                    if delta.days >= 0:
+                        years = delta.days / 365.25
+                        time_known_str = f"{years:.2f} years"
+                    else:
+                        time_known_str = "Future date"
                 except (ValueError, TypeError, AttributeError):
-                    # AttributeError can happen if date_met is not a datetime object
-                    pass # Keep as N/A if format is wrong
+                    # This can happen if date_met is not a valid date format
+                    time_known_str = "Invalid date"
 
             # Calculate time since last seen
             last_seen_str = "N/A"
@@ -846,9 +833,12 @@ class App(tk.Tk):
         """Helper to open a dialog for adding/editing contacts."""
         dialog = tk.Toplevel(self)
         dialog.title(title)
-        dialog.geometry("400x400")
+        dialog.geometry("400x450")
 
-        fields = ["First Name", "Last Name", "Email", "Birthday (YYYY-MM-DD)", "Date Met (YYYY-MM-DD)", "How Met", "Favorite Color"]
+        fields = [
+            "First Name", "Last Name", "Chosen Name", "Pronouns", "Email",
+            "Birthday (YYYY-MM-DD)", "Date Met (YYYY-MM-DD)", "How Met", "Favorite Color"
+        ]
         entries = {}
 
         for i, field in enumerate(fields):
@@ -860,6 +850,8 @@ class App(tk.Tk):
         if contact_data:
             entries["First Name"].insert(0, contact_data['first_name'] or "")
             entries["Last Name"].insert(0, contact_data['last_name'] or "")
+            entries["Chosen Name"].insert(0, contact_data['chosen_name'] or "")
+            entries["Pronouns"].insert(0, contact_data['pronouns'] or "")
             entries["Email"].insert(0, contact_data['email'] or "")
             entries["Birthday (YYYY-MM-DD)"].insert(0, contact_data['birthday'] or "")
             entries["Date Met (YYYY-MM-DD)"].insert(0, contact_data['date_met'] or "")
@@ -876,6 +868,8 @@ class App(tk.Tk):
             data = {
                 "first_name": first_name,
                 "last_name": entries["Last Name"].get().strip() or None,
+                "chosen_name": entries["Chosen Name"].get().strip() or None,
+                "pronouns": entries["Pronouns"].get().strip() or None,
                 "email": entries["Email"].get().strip() or None,
                 "birthday": entries["Birthday (YYYY-MM-DD)"].get().strip() or None,
                 "date_met": entries["Date Met (YYYY-MM-DD)"].get().strip() or None,
@@ -889,11 +883,12 @@ class App(tk.Tk):
                         cursor = conn.cursor()
                         cursor.execute("""
                             UPDATE contacts SET
-                                first_name = ?, last_name = ?, email = ?, birthday = ?,
-                                date_met = ?, how_met = ?, favorite_color = ?
+                                first_name = ?, last_name = ?, chosen_name = ?, pronouns = ?,
+                                email = ?, birthday = ?, date_met = ?, how_met = ?, favorite_color = ?
                             WHERE id = ?
-                        """, (data['first_name'], data['last_name'], data['email'], data['birthday'],
-                              data['date_met'], data['how_met'], data['favorite_color'], contact_data['id']))
+                        """, (data['first_name'], data['last_name'], data['chosen_name'], data['pronouns'],
+                              data['email'], data['birthday'], data['date_met'], data['how_met'],
+                              data['favorite_color'], contact_data['id']))
                         conn.commit()
                 else: # Adding new contact
                     contacts.add_contact(**data)
@@ -940,7 +935,8 @@ class App(tk.Tk):
 
         # Create the window
         win = tk.Toplevel(self)
-        win.title(f"Details for {contact['first_name']} {contact['last_name'] or ''}")
+        display_name = f"{contact['first_name']} {contact['last_name'] or ''}".strip()
+        win.title(f"Details for {contact['chosen_name'] or display_name}")
         win.geometry("700x800")
 
         # Main details frame
@@ -951,6 +947,9 @@ class App(tk.Tk):
         last_contacted_str = contact['last_contacted_at'].strftime('%Y-%m-%d') if contact['last_contacted_at'] else 'Never'
 
         details_text = (
+            f"Name: {display_name}\n"
+            f"Chosen Name: {contact['chosen_name'] or 'N/A'}\n"
+            f"Pronouns: {contact['pronouns'] or 'N/A'}\n"
             f"Email: {contact['email'] or 'N/A'}\n"
             f"Birthday: {contact['birthday'] or 'N/A'}\n"
             f"Date Met: {date_met_str}\n"

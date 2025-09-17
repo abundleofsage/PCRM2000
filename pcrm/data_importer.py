@@ -1,77 +1,63 @@
-import csv
-import os
-import re
-from .contacts import add_contact, add_phone_to_contact, add_pet_to_contact
+import json
+import sqlite3
+from .database import get_db_connection
 
-def import_contacts_from_csv():
-    """Imports contacts from a CSV file named 'pcrm_import.csv'."""
-    filename = "pcrm_import.csv"
-    if not os.path.exists(filename):
-        print(f"Error: Import file not found at '{filename}'")
-        print("Please create a 'pcrm_import.csv' file with 'first_name' and 'last_name' columns.")
-        return
+def import_data_from_json(filepath):
+    """
+    Imports data from a JSON file, replacing all existing data.
+    Returns the graph layout if it exists in the file.
+    """
+    with open(filepath, 'r', encoding='utf-8') as f:
+        data = json.load(f)
 
-    try:
-        with open(filename, 'r', newline='', encoding='utf-8') as csvfile:
-            reader = csv.DictReader(csvfile)
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
 
-            # Check for required columns
-            if 'first_name' not in reader.fieldnames:
-                print("Error: CSV file must have a 'first_name' column.")
-                return
+        # List of tables to clear and import data into
+        # Order is important for foreign key constraints (delete from child tables first)
+        tables = ["contact_tags", "pets", "phones", "notes", "relationships", "tags", "contacts"]
 
-            contacts_to_add = []
-            for row in reader:
-                first_name = row.get('first_name', '').strip()
-                if not first_name:
-                    print(f"Skipping a row due to missing first_name.")
-                    continue
+        try:
+            # Disable foreign keys for the duration of the transaction
+            cursor.execute("PRAGMA foreign_keys = OFF;")
+            conn.commit()
 
-                # last_name is optional, handle its absence gracefully
-                last_name = row.get('last_name', '').strip() or None
+            # Begin a transaction
+            cursor.execute("BEGIN TRANSACTION;")
 
-                contacts_to_add.append(row)
+            # Clear existing data from tables
+            for table in tables:
+                print(f"Clearing table: {table}")
+                cursor.execute(f"DELETE FROM {table};")
 
-        if not contacts_to_add:
-            print("No new contacts to import from the file.")
-            return
+            # Import new data
+            # The order of insertion should be the reverse of deletion
+            for table_name in reversed(tables):
+                if table_name in data and data[table_name]:
+                    print(f"Importing data for table: {table_name}")
+                    items = data[table_name]
 
-        print(f"Found {len(contacts_to_add)} contacts to import.")
-        confirm = input("Proceed with importing these contacts? (y/n): ").lower()
+                    # Get column names from the first item
+                    columns = items[0].keys()
+                    col_str = ", ".join(columns)
+                    placeholders = ", ".join(["?"] * len(columns))
 
-        if confirm == 'y':
-            count = 0
-            for contact_data in contacts_to_add:
-                contact_id = add_contact(
-                    first_name=contact_data['first_name'],
-                    last_name=contact_data.get('last_name') or None,
-                    email=contact_data.get('email') or None,
-                    birthday=contact_data.get('birthday') or None,
-                    date_met=contact_data.get('date_met') or None,
-                    how_met=contact_data.get('how_met') or None,
-                    favorite_color=contact_data.get('favorite_color') or None
-                )
+                    # Prepare rows of data
+                    rows = [tuple(item.get(col) for col in columns) for item in items]
 
-                if contact_id:
-                    # Import phones
-                    if contact_data.get('phones'):
-                        phones_str = contact_data['phones']
-                        # Regex to handle "number(type)" format
-                        for phone_match in re.finditer(r'([^|]+)\(([^)]+)\)', phones_str):
-                            number, type = phone_match.groups()
-                            add_phone_to_contact(contact_id, number.strip(), type.strip())
+                    # Use INSERT OR REPLACE to handle potential conflicts and use the old IDs
+                    cursor.executemany(f"INSERT OR REPLACE INTO {table_name} ({col_str}) VALUES ({placeholders})", rows)
 
-                    # Import pets
-                    if contact_data.get('pets'):
-                        for pet_name in contact_data['pets'].split('|'):
-                            if pet_name.strip():
-                                add_pet_to_contact(contact_id, pet_name.strip())
+            # Commit the transaction
+            conn.commit()
 
-                    count += 1
+        except sqlite3.Error as e:
+            conn.rollback() # Rollback on error
+            raise Exception(f"Database error during import: {e}")
+        finally:
+            # Re-enable foreign keys
+            cursor.execute("PRAGMA foreign_keys = ON;")
+            conn.commit()
 
-            print(f"\nSuccessfully imported {count} contacts.")
-        else:
-            print("Import cancelled.")
-
-    except Exception as e:
-        print(f"An error occurred during import: {e}")
+    print("Successfully imported data.")
+    return data.get("graph_layout")

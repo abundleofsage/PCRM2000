@@ -14,7 +14,7 @@ def _update_last_contacted(contact_id):
         cursor.execute("UPDATE contacts SET last_contacted_at = ? WHERE id = ?", (now, contact_id))
         conn.commit()
 
-def add_contact(first_name, last_name, email=None, birthday=None, date_met=None, how_met=None, favorite_color=None):
+def add_contact(first_name, last_name, chosen_name=None, pronouns=None, email=None, birthday=None, date_met=None, how_met=None, favorite_color=None):
     """Adds a new contact to the database."""
     now = datetime.datetime.now()
     try:
@@ -22,9 +22,9 @@ def add_contact(first_name, last_name, email=None, birthday=None, date_met=None,
             cursor = conn.cursor()
             cursor.execute(
                 """INSERT INTO contacts
-                   (first_name, last_name, email, birthday, date_met, how_met, favorite_color, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (first_name, last_name, email, birthday, date_met, how_met, favorite_color, now)
+                   (first_name, last_name, chosen_name, pronouns, email, birthday, date_met, how_met, favorite_color, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (first_name, last_name, chosen_name, pronouns, email, birthday, date_met, how_met, favorite_color, now)
             )
             contact_id = cursor.lastrowid
             conn.commit()
@@ -306,7 +306,15 @@ def view_contact(full_name):
     # Main Details Panel
     last_contacted_str = contact['last_contacted_at'].strftime('%Y-%m-%d') if contact['last_contacted_at'] else '[red]Never[/red]'
 
+    # Build the display name
+    display_name = f"{contact['first_name']} {contact['last_name'] or ''}".strip()
+    if contact['chosen_name']:
+        panel_title = f"[bold white]{contact['chosen_name']} ({display_name})[/bold white]"
+    else:
+        panel_title = f"[bold white]{display_name}[/bold white]"
+
     details = (
+        f"[b]Pronouns:[/b] {contact['pronouns'] or 'N/A'}\n"
         f"[b]Email:[/b] {contact['email'] or 'N/A'}\n"
         f"[b]Birthday:[/b] {contact['birthday'] or 'N/A'}\n"
         f"[b]Date Met:[/b] {contact['date_met'] or 'N/A'}\n"
@@ -319,7 +327,6 @@ def view_contact(full_name):
     if tags:
         details += f"\n[b]Tags:[/b] [cyan]{', '.join(tags)}[/cyan]"
 
-    panel_title = f"[bold white]{contact['first_name']} {contact['last_name'] or ''}[/bold white]"
     console.print(Panel(details, title=panel_title, border_style="blue", expand=False))
 
     # Associated Info in Tables
@@ -416,9 +423,11 @@ def edit_contact(full_name):
         print("4. Edit Date Met")
         print("5. Edit How Met")
         print("6. Edit Favorite Color")
-        print("7. Add Phone Number")
-        print("8. Add Pet")
-        print("9. Back to Main Menu")
+        print("7. Edit Chosen Name")
+        print("8. Edit Pronouns")
+        print("9. Add Phone Number")
+        print("10. Add Pet")
+        print("11. Back to Main Menu")
 
         choice = input("What would you like to edit? ")
 
@@ -470,15 +479,29 @@ def edit_contact(full_name):
                 conn.commit()
             print("Favorite color updated.")
         elif choice == '7':
+            new_chosen_name = input(f"Enter new chosen name (current: {contact['chosen_name'] or 'N/A'}): ").strip()
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE contacts SET chosen_name = ? WHERE id = ?", (new_chosen_name, contact_id))
+                conn.commit()
+            print("Chosen name updated.")
+        elif choice == '8':
+            new_pronouns = input(f"Enter new pronouns (current: {contact['pronouns'] or 'N/A'}): ").strip()
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE contacts SET pronouns = ? WHERE id = ?", (new_pronouns, contact_id))
+                conn.commit()
+            print("Pronouns updated.")
+        elif choice == '9':
             phone_number = input("Enter phone number: ").strip()
             phone_type = input("Enter phone type (e.g., mobile, home, work): ").strip()
             if phone_number:
                 add_phone_to_contact(contact_id, phone_number, phone_type)
-        elif choice == '8':
+        elif choice == '10':
             pet_name = input("Enter pet's name: ").strip()
             if pet_name:
                 add_pet_to_contact(contact_id, pet_name)
-        elif choice == '9':
+        elif choice == '11':
             break
         else:
             print("Invalid choice. Please try again.")

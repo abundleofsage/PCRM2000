@@ -1,12 +1,14 @@
 import sys
 from pcrm.gui import main as run_gui
 from data_simulator import run_simulator
-from pcrm.database import create_tables
+from pcrm.database import create_tables, migrate_db
 
 def main():
     """Main function to run the application."""
     # Ensure tables exist before running anything
     create_tables()
+    # Apply any pending database migrations
+    migrate_db()
 
     if len(sys.argv) > 1 and sys.argv[1] == 'simulate':
         print("Running data simulator...")
