@@ -8,12 +8,16 @@ from .database import get_db_connection
 from . import contacts
 from . import data_exporter
 from .google_calendar import create_calendar_event
+import networkx as nx
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
 
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("pCRM")
-        self.geometry("900x700")
+        self.geometry("1200x800")
 
         # Create the tab control
         self.notebook = ttk.Notebook(self)
@@ -24,6 +28,7 @@ class App(tk.Tk):
         self.interactions_tab = ttk.Frame(self.notebook)
         self.occasions_tab = ttk.Frame(self.notebook)
         self.relationships_tab = ttk.Frame(self.notebook)
+        self.graph_tab = ttk.Frame(self.notebook)
         self.data_tab = ttk.Frame(self.notebook)
 
         # Add the tabs to the notebook
@@ -32,6 +37,7 @@ class App(tk.Tk):
         self.notebook.add(self.interactions_tab, text="Interactions & Reminders")
         self.notebook.add(self.occasions_tab, text="Occasions & Gifts")
         self.notebook.add(self.relationships_tab, text="Relationships")
+        self.notebook.add(self.graph_tab, text="Graph")
         self.notebook.add(self.data_tab, text="Data Management")
 
         self.notebook.pack(expand=True, fill="both")
@@ -42,11 +48,13 @@ class App(tk.Tk):
         self.setup_interactions_tab()
         self.setup_occasions_tab()
         self.setup_relationships_tab()
+        self.setup_graph_tab()
         self.setup_data_tab()
 
         # 2. Then, populate the UI with data
         self.populate_dashboard()
         self.populate_contacts_tree()
+        self.populate_relationship_graph()
 
     def setup_relationships_tab(self):
         """Sets up the widgets for the relationship management tab."""
@@ -626,16 +634,35 @@ class App(tk.Tk):
         # Contacts List
         tree_frame = ttk.Frame(contacts_frame)
         tree_frame.pack(fill="both", expand=True)
+        tree_frame.grid_rowconfigure(0, weight=1)
+        tree_frame.grid_columnconfigure(0, weight=1)
 
-        columns = ["ID", "First Name", "Last Name", "Email"]
+        columns = ["ID", "First Name", "Last Name", "Email", "Birthday", "Tags", "Time Known", "Last Seen"]
         self.contacts_tree = self._create_treeview(tree_frame, columns)
-        self.contacts_tree.column("ID", width=50, anchor="center")
-        # Add scrollbar
-        scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self.contacts_tree.yview)
-        self.contacts_tree.configure(yscroll=scrollbar.set)
-        scrollbar.pack(side="right", fill="y")
+        self.contacts_tree.column("ID", width=40, anchor="center")
+        self.contacts_tree.column("Time Known", anchor="e")
+        self.contacts_tree.column("Last Seen", anchor="e")
+        self.contacts_tree.grid(row=0, column=0, sticky='nsew')
+
+
+        # Add scrollbars
+        v_scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self.contacts_tree.yview)
+        self.contacts_tree.configure(yscroll=v_scrollbar.set)
+        v_scrollbar.grid(row=0, column=1, sticky='ns')
+
+        h_scrollbar = ttk.Scrollbar(tree_frame, orient="horizontal", command=self.contacts_tree.xview)
+        self.contacts_tree.configure(xscroll=h_scrollbar.set)
+        h_scrollbar.grid(row=1, column=0, sticky='ew')
+
+        self.contacts_tree.bind("<Double-1>", self.on_contact_double_click)
 
         self._refresh_tags_combo()
+
+    def on_contact_double_click(self, event):
+        """Handler for double-clicking a contact in the tree."""
+        region = self.contacts_tree.identify_region(event.x, event.y)
+        if region == "cell":
+            self.view_contact_window()
 
     def _refresh_tags_combo(self):
         """Refreshes the list of tags in the filter combobox."""
@@ -669,37 +696,76 @@ class App(tk.Tk):
         for i in self.contacts_tree.get_children():
             self.contacts_tree.delete(i)
 
-        query = "SELECT c.id, c.first_name, c.last_name, c.email FROM contacts c"
+        # Base query with all columns and tag aggregation
+        query = """
+            SELECT
+                c.id, c.first_name, c.last_name, c.email, c.birthday, c.date_met, c.last_contacted_at,
+                GROUP_CONCAT(t.name) AS tags
+            FROM contacts c
+            LEFT JOIN contact_tags ct ON c.id = ct.contact_id
+            LEFT JOIN tags t ON ct.tag_id = t.id
+        """
         params = []
+        where_clauses = []
 
         if tag_filter:
-            query += """
-                JOIN contact_tags ct ON c.id = ct.contact_id
-                JOIN tags t ON ct.tag_id = t.id
-                WHERE t.name = ?
-            """
+            # This is tricky with GROUP BY. We filter by contacts that HAVE the tag.
+            # We can't just add a WHERE clause here easily.
+            # A subquery is a clean way to handle this.
+            where_clauses.append("c.id IN (SELECT contact_id FROM contact_tags JOIN tags ON tags.id = contact_tags.tag_id WHERE tags.name = ?)")
             params.append(tag_filter)
 
         if search_query:
-            # Add WHERE or AND depending on if tag filter is active
-            if "WHERE" in query:
-                query += " AND (c.first_name LIKE ? OR c.last_name LIKE ? OR c.email LIKE ?)"
-            else:
-                query += " WHERE (c.first_name LIKE ? OR c.last_name LIKE ? OR c.email LIKE ?)"
+            where_clauses.append("(c.first_name LIKE ? OR c.last_name LIKE ? OR c.email LIKE ?)")
             params.extend([f"%{search_query}%", f"%{search_query}%", f"%{search_query}%"])
 
-        query += " ORDER BY c.first_name, c.last_name"
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
+
+        query += " GROUP BY c.id ORDER BY c.first_name, c.last_name"
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(query, params)
             all_contacts = cursor.fetchall()
 
+        today = datetime.date.today()
         for contact in all_contacts:
-            self.contacts_tree.insert("", "end", values=(contact['id'], contact['first_name'], contact['last_name'], contact['email']))
+            # Calculate time known
+            time_known_str = "N/A"
+            if contact['date_met']:
+                try:
+                    date_met_obj = datetime.datetime.strptime(contact['date_met'], '%Y-%m-%d').date()
+                    delta = today - date_met_obj
+                    time_known_str = f"{delta.days} days"
+                except (ValueError, TypeError):
+                    pass # Keep as N/A if format is wrong
+
+            # Calculate time since last seen
+            last_seen_str = "N/A"
+            if contact['last_contacted_at']:
+                try:
+                    # The timestamp might be in ISO format 'YYYY-MM-DD HH:MM:SS.ffffff'
+                    last_contacted_obj = datetime.datetime.fromisoformat(contact['last_contacted_at']).date()
+                    delta = today - last_contacted_obj
+                    last_seen_str = f"{delta.days} days ago"
+                except (ValueError, TypeError):
+                    pass # Keep as N/A
+
+            values = (
+                contact['id'],
+                contact['first_name'],
+                contact['last_name'] or '',
+                contact['email'] or '',
+                contact['birthday'] or '',
+                contact['tags'] or '',
+                time_known_str,
+                last_seen_str
+            )
+            self.contacts_tree.insert("", "end", values=values)
 
         # Refresh dashboard as well since contact changes can affect it
-        if not search_query: # Avoid refreshing dashboard during a search
+        if not search_query and not tag_filter: # Avoid refreshing during filters
              self.populate_dashboard()
              self._refresh_contact_combos()
 
@@ -821,9 +887,11 @@ class App(tk.Tk):
         if not selected_item:
             messagebox.showwarning("No Selection", "Please select a contact to view.")
             return
-
         contact_id = self.contacts_tree.item(selected_item)['values'][0]
+        self._view_contact_details_by_id(contact_id)
 
+    def _view_contact_details_by_id(self, contact_id):
+        """Helper function to open the details view for a given contact ID."""
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM contacts WHERE id = ?", (contact_id,))
@@ -1112,6 +1180,78 @@ class App(tk.Tk):
             name = f"{c['first_name']} {c['last_name'] or ''}"
             last_contacted_str = c['last_contacted_at'].strftime('%Y-%m-%d')
             self.suggestions_tree.insert("", "end", values=(name, last_contacted_str))
+
+    def setup_graph_tab(self):
+        """Sets up the widgets for the relationship graph tab."""
+        graph_frame = ttk.Frame(self.graph_tab, padding="10")
+        graph_frame.pack(fill="both", expand=True)
+
+        self.G = nx.Graph()
+        self.graph_figure = Figure(figsize=(8, 6), dpi=100)
+        self.graph_ax = self.graph_figure.add_subplot(111)
+        self.graph_pos = None # To store node positions
+
+        self.canvas = FigureCanvasTkAgg(self.graph_figure, master=graph_frame)
+        self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        self.canvas.mpl_connect('button_press_event', self.on_graph_click)
+
+
+    def populate_relationship_graph(self):
+        """Fetches all contacts and relationships and draws the graph."""
+        self.G.clear()
+        self.graph_ax.clear()
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            # Fetch all contacts (nodes)
+            cursor.execute("SELECT id, first_name, last_name FROM contacts")
+            db_contacts = cursor.fetchall()
+            # Fetch all relationships (edges)
+            cursor.execute("SELECT contact1_id, contact2_id, relationship_type FROM relationships")
+            db_relationships = cursor.fetchall()
+
+        if not db_contacts:
+            self.graph_ax.text(0.5, 0.5, "No contacts to display.", ha='center', va='center')
+            self.canvas.draw()
+            return
+
+        # Add nodes to the graph
+        for contact in db_contacts:
+            self.G.add_node(contact['id'], name=f"{contact['first_name']} {contact['last_name'] or ''}".strip())
+
+        # Add edges to the graph
+        for rel in db_relationships:
+            # Ensure both nodes exist in the graph before adding an edge
+            if rel['contact1_id'] in self.G and rel['contact2_id'] in self.G:
+                self.G.add_edge(rel['contact1_id'], rel['contact2_id'], label=rel['relationship_type'])
+
+        # Draw the graph
+        self.graph_pos = nx.spring_layout(self.G, k=0.8, iterations=50) # Increase k for more space
+        labels = nx.get_node_attributes(self.G, 'name')
+        edge_labels = nx.get_edge_attributes(self.G, 'label')
+
+        nx.draw(self.G, self.graph_pos, ax=self.graph_ax, with_labels=True, labels=labels,
+                node_color='skyblue', node_size=2000, font_size=8,
+                width=1.5, edge_color='gray')
+        nx.draw_networkx_edge_labels(self.G, self.graph_pos, edge_labels=edge_labels, ax=self.graph_ax, font_size=7)
+
+        self.graph_ax.set_title("Contact Relationships")
+        self.graph_figure.tight_layout()
+        self.canvas.draw()
+
+    def on_graph_click(self, event):
+        """Handler for clicking on the relationship graph."""
+        if event.inaxes != self.graph_ax or self.graph_pos is None:
+            return
+
+        # Check if the click is near any node
+        for node_id, (x, y) in self.graph_pos.items():
+            # Calculate distance from click to node
+            dist = ((event.xdata - x)**2 + (event.ydata - y)**2)**0.5
+            # This threshold might need adjustment depending on DPI and node size
+            if dist < 0.1:
+                self._view_contact_details_by_id(node_id)
+                return # Stop after finding the first clicked node
 
 
 def main():
